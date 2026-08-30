@@ -17,7 +17,9 @@ export type Subscription = {
   appStoreURL: string
   icon: string
   iconPath?: string
+  iconURL?: string
   color: string
+  progressColor: string
   active: boolean
 }
 
@@ -109,7 +111,9 @@ export function createSubscription(settings: AppSettings = DEFAULT_SETTINGS, cat
     appStoreURL: "",
     icon: catalog?.icon ?? "creditcard.fill",
     iconPath: "",
+    iconURL: "",
     color: catalog?.color ?? "systemBlue",
+    progressColor: "systemBlue",
     active: true,
   }
 }
@@ -127,6 +131,9 @@ function normalize(item: Partial<Subscription>): Subscription {
     reminderDays: REMINDER_OPTIONS.includes(Number(item.reminderDays)) ? Number(item.reminderDays) : base.reminderDays,
     trialEndDate: item.trialEndDate ?? null,
     endDate: item.endDate ?? null,
+    iconPath: typeof item.iconPath === "string" ? item.iconPath : "",
+    iconURL: typeof item.iconURL === "string" ? item.iconURL : "",
+    progressColor: typeof item.progressColor === "string" ? item.progressColor : (typeof item.color === "string" ? item.color : base.progressColor),
     autoRenew: item.autoRenew !== false,
     active: item.active !== false,
   }
@@ -141,22 +148,22 @@ export function loadSubscriptions(): Subscription[] {
   }
 }
 
-export function saveSubscriptions(items: Subscription[]): void {
-  Storage.set(STORAGE_KEY, items)
+export async function saveSubscriptions(items: Subscription[]): Promise<void> {
+  await Storage.set(STORAGE_KEY, items)
 }
 
-export function upsertSubscription(item: Subscription): Subscription[] {
+export async function upsertSubscription(item: Subscription): Promise<Subscription[]> {
   const items = loadSubscriptions()
   const next = items.some(existing => existing.id === item.id)
     ? items.map(existing => existing.id === item.id ? item : existing)
     : [...items, item]
-  saveSubscriptions(next)
+  await saveSubscriptions(next)
   return next
 }
 
-export function removeSubscription(id: string): Subscription[] {
+export async function removeSubscription(id: string): Promise<Subscription[]> {
   const next = loadSubscriptions().filter(item => item.id !== id)
-  saveSubscriptions(next)
+  await saveSubscriptions(next)
   return next
 }
 
