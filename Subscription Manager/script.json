@@ -1,0 +1,14 @@
+{
+  "localizedNames": null,
+  "localizedDescriptions": null,
+  "intentInputTypes": [],
+  "author": null,
+  "contributors": [],
+  "name": "订阅管理",
+  "color": "rgba(55, 125, 255, 1)",
+  "runInApp": false,
+  "icon": "creditcard.fill",
+  "remoteResource": null,
+  "version": "0.1.0",
+  "description": "本地订阅管理、续费提醒、费用统计与桌面小组件"
+}
