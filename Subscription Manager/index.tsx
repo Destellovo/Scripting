@@ -143,7 +143,24 @@ function SubscriptionEditor({
   const [hasTrial, setHasTrial] = useState(!!initial.trialEndDate)
   const [hasEndDate, setHasEndDate] = useState(!!initial.endDate)
   const [customIcons, setCustomIcons] = useState<CustomIcon[]>(() => loadCustomIcons())
+  const [remoteIcons, setRemoteIcons] = useState<RemoteIcon[]>([])
+  const [remoteQuery, setRemoteQuery] = useState("")
+  const [remoteLoading, setRemoteLoading] = useState(false)
   const iconIsCustom = item.icon.startsWith("custom:") && !!item.iconPath
+  const iconIsRemote = item.icon.startsWith("remote:") && !!item.iconURL
+
+  async function loadRemoteIcons() {
+    setRemoteLoading(true)
+    try {
+      const icons = await fetchAllRemoteIcons()
+      setRemoteIcons(icons)
+      if (icons.length === 0) setError("图标库为空或暂时无法访问")
+    } catch (error) {
+      setError(`读取图标库失败：${String(error)}`)
+    } finally {
+      setRemoteLoading(false)
+    }
+  }
 
   function update(patch: Partial<Subscription>) {
     setItem(previous => ({ ...previous, ...patch }))
@@ -163,6 +180,14 @@ function SubscriptionEditor({
     const icons = deleteCustomIcon(icon.id)
     setCustomIcons(icons)
     if (item.icon === `custom:${icon.id}`) update({ icon: "creditcard.fill", iconPath: "" })
+  }
+
+  function chooseRemoteIcon(icon: RemoteIcon) {
+    update({ icon: `remote:${icon.name}`, iconURL: icon.url, iconPath: "" })
+  }
+
+  function clearIconSelection() {
+    update({ icon: "creditcard.fill", iconURL: "", iconPath: "" })
   }
 
   function save() {
@@ -258,12 +283,28 @@ function SubscriptionEditor({
         if (index !== null && customIcons[index]) removeIcon(customIcons[index])
       }} /> : null}
       {iconIsCustom ? <Text font="caption" foregroundStyle="secondaryLabel">当前使用：{customIcons.find(icon => icon.id === item.icon.slice(7))?.name || "外部图标"}</Text> : null}
-      <Picker title="系统图标" pickerStyle="menu" value={iconIsCustom ? "__system_default__" : item.icon} onChanged={value => update({ icon: String(value), iconPath: "" })}>
+      {iconIsRemote ? <Text font="caption" foregroundStyle="secondaryLabel">当前使用远程图标：{item.icon.slice(7)}</Text> : null}
+      <Button title={remoteLoading ? "正在读取图标库…" : "读取远程图标库"} systemImage="arrow.clockwise" action={loadRemoteIcons} disabled={remoteLoading} />
+      {remoteIcons.length > 0 ? <VStack alignment="leading" spacing={5}>
+        <Text font="caption" foregroundStyle="secondaryLabel">远程图标（{remoteIcons.length}）</Text>
+        <TextField title="筛选图标" value={remoteQuery} onChanged={setRemoteQuery} prompt="输入名称搜索" />
+        {remoteIcons.filter(icon => !remoteQuery || icon.name.toLowerCase().includes(remoteQuery.toLowerCase())).slice(0, 60).map(icon => <Button key={`${icon.name}-${icon.url}`} action={() => chooseRemoteIcon(icon)}>
+          <HStack>
+            <Image imageUrl={icon.url} resizable={true} scaleToFit={true} frame={{ width: 28, height: 28 }} />
+            <Text lineLimit={1}>{icon.name}</Text>
+            <Spacer />
+            {item.iconURL === icon.url ? <Image systemName="checkmark" foregroundStyle="systemBlue" /> : <Image systemName="plus.circle" foregroundStyle="systemBlue" />}
+          </HStack>
+        </Button>)}
+      </VStack> : null}
+      {(iconIsCustom || iconIsRemote) ? <Button title="改用系统图标" systemImage="arrow.uturn.backward" action={clearIconSelection} /> : null}
+      <Picker title="系统图标" pickerStyle="menu" value={iconIsCustom || iconIsRemote ? "__system_default__" : item.icon} onChanged={value => update({ icon: String(value), iconURL: "", iconPath: "" })}>
         {ICON_OPTIONS.map(value => <Text tag={value}>{value}</Text>)}
       </Picker>
-      <Picker title="颜色" pickerStyle="menu" value={item.color} onChanged={value => update({ color: String(value) })}>
+      <Picker title="进度条颜色" pickerStyle="menu" value={item.progressColor} onChanged={value => update({ progressColor: String(value) })}>
         {COLOR_OPTIONS.map(value => <Text tag={value}>{value.replace("system", "")}</Text>)}
       </Picker>
+      <Text font="caption" foregroundStyle="secondaryLabel">进度条颜色会用于桌面 Widget 的剩余天数显示</Text>
     </Section>
     <Section header={<Text>日期与续费</Text>}>
       <DatePicker
