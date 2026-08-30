@@ -26,6 +26,7 @@ import {
 } from "./model"
 import { notificationSummary, rescheduleNotifications } from "./notifications"
 import { CustomIcon, deleteCustomIcon, importCustomIcons, loadCustomIcons } from "./icons"
+import { RemoteIcon, fetchAllRemoteIcons, loadIconLibraryURLs, saveIconLibraryURLs, cacheRemoteIcon } from "./remote-icons"
 
 import {
   Button,
@@ -108,7 +109,7 @@ function SubscriptionRow({
     <SubscriptionEditor initial={item} onSaved={onSaved} onDeleted={onDeleted} />
   }>
     <HStack spacing={10}>
-      {item.iconPath ? <Image filePath={item.iconPath} resizable={true} scaleToFit={true} frame={{ width: 30, height: 30 }} /> : <Image systemName={item.icon || "creditcard.fill"} foregroundStyle={item.color || "systemBlue"} font={22} />}
+      {item.iconPath ? <Image filePath={item.iconPath} resizable={true} scaleToFit={true} frame={{ width: 30, height: 30 }} /> : item.iconURL ? <Image imageUrl={item.iconURL} resizable={true} scaleToFit={true} frame={{ width: 30, height: 30 }} /> : <Image systemName={item.icon || "creditcard.fill"} foregroundStyle={item.color || "systemBlue"} font={22} />}
       <VStack alignment="leading" spacing={2}>
         <Text fontWeight="semibold" lineLimit={1}>{item.name || "未命名订阅"}</Text>
         <Text font="caption" foregroundStyle="secondaryLabel">{cycleLabel(item.cycle)} · {item.category}</Text>
@@ -142,6 +143,7 @@ function SubscriptionEditor({
   const [hasTrial, setHasTrial] = useState(!!initial.trialEndDate)
   const [hasEndDate, setHasEndDate] = useState(!!initial.endDate)
   const [customIcons, setCustomIcons] = useState<CustomIcon[]>(() => loadCustomIcons())
+  const iconIsCustom = item.icon.startsWith("custom:") && !!item.iconPath
 
   function update(patch: Partial<Subscription>) {
     setItem(previous => ({ ...previous, ...patch }))
@@ -151,6 +153,7 @@ function SubscriptionEditor({
     try {
       const icons = await importCustomIcons()
       setCustomIcons(icons)
+      if (icons.length === 0) setError("没有选择可用的图片")
     } catch (error) {
       setError(`导入图标失败：${String(error)}`)
     }
@@ -254,13 +257,13 @@ function SubscriptionEditor({
         })
         if (index !== null && customIcons[index]) removeIcon(customIcons[index])
       }} /> : null}
-      <Picker title="系统图标" pickerStyle="menu" value={item.iconPath ? "custom" : item.icon} onChanged={value => update({ icon: String(value), iconPath: "" })}>
+      {iconIsCustom ? <Text font="caption" foregroundStyle="secondaryLabel">当前使用：{customIcons.find(icon => icon.id === item.icon.slice(7))?.name || "外部图标"}</Text> : null}
+      <Picker title="系统图标" pickerStyle="menu" value={iconIsCustom ? "__system_default__" : item.icon} onChanged={value => update({ icon: String(value), iconPath: "" })}>
         {ICON_OPTIONS.map(value => <Text tag={value}>{value}</Text>)}
       </Picker>
       <Picker title="颜色" pickerStyle="menu" value={item.color} onChanged={value => update({ color: String(value) })}>
         {COLOR_OPTIONS.map(value => <Text tag={value}>{value.replace("system", "")}</Text>)}
       </Picker>
-      {item.iconPath ? <Text font="caption" foregroundStyle="secondaryLabel">当前使用：{customIcons.find(icon => icon.filePath === item.iconPath)?.name || "外部图标"}</Text> : null}
     </Section>
     <Section header={<Text>日期与续费</Text>}>
       <DatePicker
@@ -368,27 +371,28 @@ function Home({ onOpenSettings, onOpenStats }: { onOpenSettings: () => void; onO
   const [showAdd, setShowAdd] = useState(false)
   const [showPopular, setShowPopular] = useState(false)
 
-  function save(item: Subscription) {
-    const next = items.some(x => x.id === item.id)
-      ? items.map(x => x.id === item.id ? item : x)
+  function saveSubscription(item: Subscription) {
+    const next = items.some(existing => existing.id === item.id)
+      ? items.map(existing => existing.id === item.id ? item : existing)
       : [...items, item]
     setItems(next)
     saveSubscriptions(next)
-    rescheduleNotifications(next, loadSettings())
+    rescheduleNotifications(next, loadSettings()).catch(error => console.error("刷新提醒失败", error))
   }
-  function remove(id: string) {
-    const next = removeSubscription(id)
+  function removeSubscriptionItem(id: string) {
+    const next = items.filter(item => item.id !== id)
     setItems(next)
-    rescheduleNotifications(next, loadSettings())
+    saveSubscriptions(next)
+    rescheduleNotifications(next, loadSettings()).catch(error => console.error("刷新提醒失败", error))
   }
 
   if (showAdd) return <SubscriptionEditor
     initial={createSubscription(loadSettings())}
     isNew={true}
-    onSaved={item => { save(item); setShowAdd(false) }}
+    onSaved={item => { saveSubscription(item); setShowAdd(false) }}
     onDeleted={() => setShowAdd(false)}
   />
-  if (showPopular) return <PopularPicker onPicked={item => { save(item); setShowPopular(false) }} />
+  if (showPopular) return <PopularPicker onPicked={item => { saveSubscription(item); setShowPopular(false) }} />
 
   const active = sortByNextBilling(activeItems(items))
   return <List navigationTitle="订阅管理" navigationBarTitleDisplayMode="large" toolbar={{
@@ -398,7 +402,7 @@ function Home({ onOpenSettings, onOpenStats }: { onOpenSettings: () => void; onO
     <Section header={<Text>我的订阅</Text>}>
       {active.length === 0
         ? <Text foregroundStyle="secondaryLabel">还没有订阅，点击下方添加</Text>
-        : active.map(item => <SubscriptionRow key={item.id} item={item} onSaved={save} onDeleted={remove} />)}
+        : active.map(item => <SubscriptionRow key={item.id} item={item} onSaved={item => { saveSubscription(item) }} onDeleted={id => { removeSubscriptionItem(id) }} />)}
     </Section>
     <Section>
       <Button title="从常用服务添加" systemImage="square.grid.2x2" action={() => setShowPopular(true)} />
