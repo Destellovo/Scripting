@@ -19,11 +19,13 @@ import {
   loadSettings,
   loadSubscriptions,
   monthlyCost,
+  removeSubscription,
   saveSettings,
   saveSubscriptions,
   sortByNextBilling,
 } from "./model"
 import { notificationSummary, rescheduleNotifications } from "./notifications"
+import { CustomIcon, deleteCustomIcon, importCustomIcons, loadCustomIcons } from "./icons"
 
 import {
   Button,
@@ -106,16 +108,10 @@ function SubscriptionRow({
     <SubscriptionEditor initial={item} onSaved={onSaved} onDeleted={onDeleted} />
   }>
     <HStack spacing={10}>
-      <Image
-        systemName={item.icon || "creditcard.fill"}
-        foregroundStyle={item.color || "systemBlue"}
-        font={22}
-      />
+      {item.iconPath ? <Image filePath={item.iconPath} resizable={true} scaleToFit={true} frame={{ width: 30, height: 30 }} /> : <Image systemName={item.icon || "creditcard.fill"} foregroundStyle={item.color || "systemBlue"} font={22} />}
       <VStack alignment="leading" spacing={2}>
         <Text fontWeight="semibold" lineLimit={1}>{item.name || "未命名订阅"}</Text>
-        <Text font="caption" foregroundStyle="secondaryLabel">
-          {cycleLabel(item.cycle)} · {item.category}
-        </Text>
+        <Text font="caption" foregroundStyle="secondaryLabel">{cycleLabel(item.cycle)} · {item.category}</Text>
         <Text font="caption" foregroundStyle={dueColor}>{itemStatus(item)}</Text>
       </VStack>
       <Spacer />
@@ -145,9 +141,25 @@ function SubscriptionEditor({
   const [error, setError] = useState("")
   const [hasTrial, setHasTrial] = useState(!!initial.trialEndDate)
   const [hasEndDate, setHasEndDate] = useState(!!initial.endDate)
+  const [customIcons, setCustomIcons] = useState<CustomIcon[]>(() => loadCustomIcons())
 
   function update(patch: Partial<Subscription>) {
     setItem(previous => ({ ...previous, ...patch }))
+  }
+
+  async function addIcons() {
+    try {
+      const icons = await importCustomIcons()
+      setCustomIcons(icons)
+    } catch (error) {
+      setError(`导入图标失败：${String(error)}`)
+    }
+  }
+
+  function removeIcon(icon: CustomIcon) {
+    const icons = deleteCustomIcon(icon.id)
+    setCustomIcons(icons)
+    if (item.icon === `custom:${icon.id}`) update({ icon: "creditcard.fill", iconPath: "" })
   }
 
   function save() {
@@ -224,12 +236,31 @@ function SubscriptionEditor({
       </Picker>
     </Section>
     <Section header={<Text>外观</Text>}>
-      <Picker title="图标" pickerStyle="menu" value={item.icon} onChanged={value => update({ icon: String(value) })}>
+      {customIcons.length > 0 ? <Section header={<Text>图标库</Text>}>
+        {customIcons.map(icon => <Button key={icon.id} action={() => update({ icon: `custom:${icon.id}`, iconPath: icon.filePath })}>
+          <HStack>
+            <Image filePath={icon.filePath} resizable={true} scaleToFit={true} frame={{ width: 28, height: 28 }} />
+            <Text lineLimit={1}>{icon.name}</Text>
+            <Spacer />
+            {item.icon === `custom:${icon.id}` ? <Image systemName="checkmark" foregroundStyle="systemBlue" /> : null}
+          </HStack>
+        </Button>)}
+      </Section> : null}
+      <Button title="从文件导入图标" systemImage="folder.badge.plus" action={addIcons} />
+      {customIcons.length > 0 ? <Button title="管理已导入图标" systemImage="trash" action={async () => {
+        const index = await Dialog.actionSheet({
+          title: "删除图标",
+          actions: customIcons.map(icon => ({ label: icon.name, destructive: true })),
+        })
+        if (index !== null && customIcons[index]) removeIcon(customIcons[index])
+      }} /> : null}
+      <Picker title="系统图标" pickerStyle="menu" value={item.iconPath ? "custom" : item.icon} onChanged={value => update({ icon: String(value), iconPath: "" })}>
         {ICON_OPTIONS.map(value => <Text tag={value}>{value}</Text>)}
       </Picker>
       <Picker title="颜色" pickerStyle="menu" value={item.color} onChanged={value => update({ color: String(value) })}>
         {COLOR_OPTIONS.map(value => <Text tag={value}>{value.replace("system", "")}</Text>)}
       </Picker>
+      {item.iconPath ? <Text font="caption" foregroundStyle="secondaryLabel">当前使用：{customIcons.find(icon => icon.filePath === item.iconPath)?.name || "外部图标"}</Text> : null}
     </Section>
     <Section header={<Text>日期与续费</Text>}>
       <DatePicker
@@ -346,9 +377,8 @@ function Home({ onOpenSettings, onOpenStats }: { onOpenSettings: () => void; onO
     rescheduleNotifications(next, loadSettings())
   }
   function remove(id: string) {
-    const next = items.filter(item => item.id !== id)
+    const next = removeSubscription(id)
     setItems(next)
-    saveSubscriptions(next)
     rescheduleNotifications(next, loadSettings())
   }
 
