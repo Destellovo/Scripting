@@ -16,6 +16,7 @@ export type Subscription = {
   notes: string
   appStoreURL: string
   icon: string
+  iconPath?: string
   color: string
   active: boolean
 }
@@ -107,6 +108,7 @@ export function createSubscription(settings: AppSettings = DEFAULT_SETTINGS, cat
     notes: "",
     appStoreURL: "",
     icon: catalog?.icon ?? "creditcard.fill",
+    iconPath: "",
     color: catalog?.color ?? "systemBlue",
     active: true,
   }
@@ -141,6 +143,21 @@ export function loadSubscriptions(): Subscription[] {
 
 export function saveSubscriptions(items: Subscription[]): void {
   Storage.set(STORAGE_KEY, items)
+}
+
+export function upsertSubscription(item: Subscription): Subscription[] {
+  const items = loadSubscriptions()
+  const next = items.some(existing => existing.id === item.id)
+    ? items.map(existing => existing.id === item.id ? item : existing)
+    : [...items, item]
+  saveSubscriptions(next)
+  return next
+}
+
+export function removeSubscription(id: string): Subscription[] {
+  const next = loadSubscriptions().filter(item => item.id !== id)
+  saveSubscriptions(next)
+  return next
 }
 
 export function loadSettings(): AppSettings {
