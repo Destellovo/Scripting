@@ -47,10 +47,6 @@ export const ICON_OPTIONS = [
   "gamecontroller.fill", "book.fill", "figure.run", "sparkles",
   "tv.fill", "cart.fill", "graduationcap.fill", "ellipsis.circle.fill",
 ]
-export const COLOR_OPTIONS = [
-  "systemBlue", "systemPurple", "systemGreen", "systemOrange",
-  "systemRed", "systemPink", "systemTeal",
-]
 
 export const POPULAR_SERVICES: CatalogItem[] = [
   { name: "Netflix", category: "娱乐", icon: "play.rectangle.fill", color: "systemRed" },
@@ -65,14 +61,13 @@ export const POPULAR_SERVICES: CatalogItem[] = [
   { name: "Dropbox", category: "云服务", icon: "cloud.fill", color: "systemBlue" },
   { name: "ChatGPT Plus", category: "效率", icon: "sparkles", color: "systemGreen" },
   { name: "Microsoft 365", category: "效率", icon: "briefcase.fill", color: "systemBlue" },
-  { name: "Notion", category: "效率", icon: "square.on.square", color: "systemBlack" },
+  { name: "Notion", category: "效率", icon: "square.on.square", color: "systemGray" },
   { name: "Linear", category: "效率", icon: "checkmark.circle.fill", color: "systemPurple" },
   { name: "GitHub Copilot", category: "效率", icon: "chevron.left.forwardslash.chevron.right", color: "systemGray" },
   { name: "Adobe Creative Cloud", category: "效率", icon: "paintpalette.fill", color: "systemRed" },
   { name: "Kindle Unlimited", category: "阅读", icon: "book.fill", color: "systemOrange" },
   { name: "Duolingo", category: "教育", icon: "graduationcap.fill", color: "systemGreen" },
   { name: "Strava", category: "健身", icon: "figure.run", color: "systemOrange" },
-  { name: "Grammarly", category: "效率", icon: "textformat", color: "systemGreen" },
 ]
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -81,14 +76,16 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notificationsEnabled: true,
 }
 
-const STORAGE_KEY = "subscription_manager_subscriptions_v4"
-const LEGACY_STORAGE_KEYS = [
+const SUBSCRIPTIONS_KEY = "subscription_manager_subscriptions_v5"
+const LEGACY_SUBSCRIPTIONS_KEYS = [
+  "subscription_manager_subscriptions_v4",
   "subscription_manager_subscriptions_v3",
   "subscription_manager_subscriptions_v2",
   "subscription_manager_subscriptions_v1",
 ]
-const SETTINGS_KEY = "subscription_manager_settings_v4"
+const SETTINGS_KEY = "subscription_manager_settings_v5"
 const LEGACY_SETTINGS_KEYS = [
+  "subscription_manager_settings_v4",
   "subscription_manager_settings_v3",
   "subscription_manager_settings_v2",
   "subscription_manager_settings_v1",
@@ -148,10 +145,10 @@ function normalize(item: Partial<Subscription>): Subscription {
     category: CATEGORIES.includes(category) ? category : "其他",
     startDate: Number(item.startDate) || base.startDate,
     nextBillingDate: Number(item.nextBillingDate) || base.nextBillingDate,
-    reminderDays: REMINDER_OPTIONS.includes(Number(item.reminderDays))
-      ? Number(item.reminderDays) : base.reminderDays,
     trialEndDate: item.trialEndDate ? Number(item.trialEndDate) : null,
     endDate: item.endDate ? Number(item.endDate) : null,
+    reminderDays: REMINDER_OPTIONS.includes(Number(item.reminderDays))
+      ? Number(item.reminderDays) : base.reminderDays,
     iconPath: typeof item.iconPath === "string" ? item.iconPath : "",
     iconURL: typeof item.iconURL === "string" ? item.iconURL : "",
     progressColor: typeof item.progressColor === "string" && item.progressColor
@@ -162,7 +159,7 @@ function normalize(item: Partial<Subscription>): Subscription {
   }
 }
 
-async function getStorageValue<T>(key: string): Promise<T | null> {
+async function readStorage<T>(key: string): Promise<T | null> {
   try {
     const value = await Storage.get<T>(key, { shared: false })
     if (value != null) return value
@@ -175,11 +172,19 @@ async function getStorageValue<T>(key: string): Promise<T | null> {
   }
 }
 
+async function writeStorage<T>(key: string, value: T): Promise<void> {
+  const result = await Storage.set(key, value, { shared: false })
+  if (result === false) throw new Error("本地存储被拒绝")
+  try {
+    await Storage.set(key, value, { shared: true })
+  } catch { /* Widget 仍可用私有存储或文件回退 */ }
+}
+
 export async function loadSubscriptions(): Promise<Subscription[]> {
-  let value = await getStorageValue<Partial<Subscription>[]>(STORAGE_KEY)
+  let value = await readStorage<Partial<Subscription>[]>(SUBSCRIPTIONS_KEY)
   if (!Array.isArray(value)) {
-    for (const key of LEGACY_STORAGE_KEYS) {
-      value = await getStorageValue<Partial<Subscription>[]>(key)
+    for (const key of LEGACY_SUBSCRIPTIONS_KEYS) {
+      value = await readStorage<Partial<Subscription>[]>(key)
       if (Array.isArray(value)) break
     }
   }
@@ -187,26 +192,14 @@ export async function loadSubscriptions(): Promise<Subscription[]> {
 }
 
 export async function saveSubscriptions(items: Subscription[]): Promise<void> {
-  const normalized = items.map(normalize)
-  let privateError: unknown = null
-  try {
-    await Storage.set(STORAGE_KEY, normalized, { shared: false })
-  } catch (error) {
-    privateError = error
-  }
-  try {
-    await Storage.set(STORAGE_KEY, normalized, { shared: true })
-  } catch (error) {
-    console.error("共享订阅存储失败", error)
-  }
-  if (privateError) throw privateError
+  await writeStorage(SUBSCRIPTIONS_KEY, items.map(normalize))
 }
 
 export async function loadSettings(): Promise<AppSettings> {
-  let value = await getStorageValue<Partial<AppSettings>>(SETTINGS_KEY)
+  let value = await readStorage<Partial<AppSettings>>(SETTINGS_KEY)
   if (!value || typeof value !== "object") {
     for (const key of LEGACY_SETTINGS_KEYS) {
-      value = await getStorageValue<Partial<AppSettings>>(key)
+      value = await readStorage<Partial<AppSettings>>(key)
       if (value && typeof value === "object") break
     }
   }
@@ -214,10 +207,8 @@ export async function loadSettings(): Promise<AppSettings> {
     return {
       ...DEFAULT_SETTINGS,
       ...value,
-      defaultCurrency: CURRENCIES.includes(String(value.defaultCurrency))
-        ? String(value.defaultCurrency) : DEFAULT_SETTINGS.defaultCurrency,
-      defaultReminderDays: REMINDER_OPTIONS.includes(Number(value.defaultReminderDays))
-        ? Number(value.defaultReminderDays) : DEFAULT_SETTINGS.defaultReminderDays,
+      defaultCurrency: CURRENCIES.includes(String(value.defaultCurrency)) ? String(value.defaultCurrency) : DEFAULT_SETTINGS.defaultCurrency,
+      defaultReminderDays: REMINDER_OPTIONS.includes(Number(value.defaultReminderDays)) ? Number(value.defaultReminderDays) : DEFAULT_SETTINGS.defaultReminderDays,
       notificationsEnabled: value.notificationsEnabled !== false,
     }
   }
@@ -225,18 +216,7 @@ export async function loadSettings(): Promise<AppSettings> {
 }
 
 export async function saveSettings(settings: AppSettings): Promise<void> {
-  let privateError: unknown = null
-  try {
-    await Storage.set(SETTINGS_KEY, settings, { shared: false })
-  } catch (error) {
-    privateError = error
-  }
-  try {
-    await Storage.set(SETTINGS_KEY, settings, { shared: true })
-  } catch (error) {
-    console.error("共享设置存储失败", error)
-  }
-  if (privateError) throw privateError
+  await writeStorage(SETTINGS_KEY, settings)
 }
 
 export function cycleLabel(cycle: BillingCycle): string {
@@ -259,17 +239,17 @@ export function cycleMultiplier(cycle: BillingCycle): number {
   }
 }
 
+export function activeItems(items: Subscription[]): Subscription[] {
+  const now = dateOnly(Date.now())
+  return items.filter(item => item.active && (!item.endDate || item.endDate >= now))
+}
+
 export function monthlyEquivalent(item: Subscription): number {
   return item.active ? item.price * cycleMultiplier(item.cycle) / 12 : 0
 }
 
 export function annualEquivalent(item: Subscription): number {
   return item.active ? item.price * cycleMultiplier(item.cycle) : 0
-}
-
-export function activeItems(items: Subscription[]): Subscription[] {
-  const now = dateOnly(Date.now())
-  return items.filter(item => item.active && (!item.endDate || item.endDate >= now))
 }
 
 export function monthlyCost(items: Subscription[]): number {
@@ -302,12 +282,7 @@ export function formatCostSummary(items: Subscription[], annual = false): string
 
 export function formatDate(timestamp: number | null): string {
   if (!timestamp) return "未设置"
-  try {
-    return new Intl.DateTimeFormat(undefined, { year: "numeric", month: "numeric", day: "numeric" }).format(new Date(timestamp))
-  } catch {
-    const date = new Date(timestamp)
-    return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`
-  }
+  return new Intl.DateTimeFormat(undefined, { year: "numeric", month: "numeric", day: "numeric" }).format(new Date(timestamp))
 }
 
 export function daysUntil(timestamp: number): number {
@@ -315,10 +290,10 @@ export function daysUntil(timestamp: number): number {
 }
 
 export function effectiveDueDate(item: Subscription): number {
-  const dates = [item.nextBillingDate]
-  if (item.trialEndDate && daysUntil(item.trialEndDate) >= 0) dates.push(item.trialEndDate)
-  if (item.endDate) dates.push(item.endDate)
-  return Math.min(...dates.filter(value => Number.isFinite(value) && value > 0))
+  const candidates = [item.nextBillingDate]
+  if (item.trialEndDate && daysUntil(item.trialEndDate) >= 0) candidates.push(item.trialEndDate)
+  if (item.endDate) candidates.push(item.endDate)
+  return Math.min(...candidates.filter(value => Number.isFinite(value) && value > 0))
 }
 
 export function remainingDays(item: Subscription): number {
@@ -339,8 +314,7 @@ function previousBillingDate(timestamp: number, cycle: BillingCycle): number {
 
 export function remainingProgress(item: Subscription): number {
   const end = effectiveDueDate(item)
-  let start = item.startDate
-  if (item.cycle !== "oneTime") start = Math.max(start, previousBillingDate(end, item.cycle))
+  const start = item.cycle === "oneTime" ? item.startDate : Math.max(item.startDate, previousBillingDate(end, item.cycle))
   const total = Math.max(DAY, end - start)
   const remaining = Math.max(0, end - dateOnly(Date.now()))
   return Math.max(0, Math.min(1, remaining / total))
