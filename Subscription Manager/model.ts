@@ -78,10 +78,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notificationsEnabled: true,
 }
 
-const STORAGE_KEY = "subscription_manager_subscriptions_v2"
-const LEGACY_STORAGE_KEY = "subscription_manager_subscriptions_v1"
-const SETTINGS_KEY = "subscription_manager_settings_v2"
-const LEGACY_SETTINGS_KEY = "subscription_manager_settings_v1"
+const STORAGE_KEY = "subscription_manager_subscriptions_v3"
+const LEGACY_STORAGE_KEYS = ["subscription_manager_subscriptions_v2", "subscription_manager_subscriptions_v1"]
+const SETTINGS_KEY = "subscription_manager_settings_v3"
+const LEGACY_SETTINGS_KEYS = ["subscription_manager_settings_v2", "subscription_manager_settings_v1"]
 const DAY = 24 * 60 * 60 * 1000
 
 export function makeID(): string {
@@ -123,15 +123,17 @@ export function createSubscription(settings: AppSettings = DEFAULT_SETTINGS, cat
 function normalize(item: Partial<Subscription>): Subscription {
   const base = createSubscription()
   const cycle = String(item.cycle)
+  const currency = String(item.currency)
+  const category = String(item.category)
   return {
     ...base,
     ...item,
-    id: item.id || makeID(),
+    id: typeof item.id === "string" && item.id ? item.id : makeID(),
     name: String(item.name || ""),
-    price: Number.isFinite(Number(item.price)) ? Number(item.price) : 0,
-    currency: CURRENCIES.includes(String(item.currency)) ? String(item.currency) : base.currency,
+    price: Number.isFinite(Number(item.price)) ? Math.max(0, Number(item.price)) : 0,
+    currency: CURRENCIES.includes(currency) ? currency : base.currency,
     cycle: ["weekly", "monthly", "quarterly", "yearly", "oneTime"].includes(cycle) ? cycle as BillingCycle : "monthly",
-    category: CATEGORIES.includes(String(item.category)) ? String(item.category) : "其他",
+    category: CATEGORIES.includes(category) ? category : "其他",
     startDate: Number(item.startDate) || base.startDate,
     nextBillingDate: Number(item.nextBillingDate) || base.nextBillingDate,
     reminderDays: REMINDER_OPTIONS.includes(Number(item.reminderDays)) ? Number(item.reminderDays) : base.reminderDays,
@@ -139,18 +141,34 @@ function normalize(item: Partial<Subscription>): Subscription {
     endDate: item.endDate ? Number(item.endDate) : null,
     iconPath: typeof item.iconPath === "string" ? item.iconPath : "",
     iconURL: typeof item.iconURL === "string" ? item.iconURL : "",
-    progressColor: typeof item.progressColor === "string" && item.progressColor.length > 0 ? item.progressColor : "systemBlue",
+    progressColor: typeof item.progressColor === "string" && item.progressColor ? item.progressColor : (typeof item.color === "string" && item.color ? item.color : "systemBlue"),
     autoRenew: item.autoRenew !== false,
     active: item.active !== false,
   }
 }
 
+async function getStorageValue<T>(key: string): Promise<T | null> {
+  try {
+    const privateValue = await Storage.get<T>(key, { shared: false })
+    if (privateValue != null) return privateValue
+  } catch { /* 尝试共享域 */ }
+  try {
+    const sharedValue = await Storage.get<T>(key, { shared: true })
+    return sharedValue ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function loadSubscriptions(): Promise<Subscription[]> {
   try {
-    let value = await Storage.get<Partial<Subscription>[]>(STORAGE_KEY, { shared: false })
-    if (!Array.isArray(value)) value = await Storage.get<Partial<Subscription>[]>(STORAGE_KEY, { shared: true })
-    if (!Array.isArray(value)) value = await Storage.get<Partial<Subscription>[]>(LEGACY_STORAGE_KEY, { shared: false })
-    if (!Array.isArray(value)) value = await Storage.get<Partial<Subscription>[]>(LEGACY_STORAGE_KEY, { shared: true })
+    let value = await getStorageValue<Partial<Subscription>[]>(STORAGE_KEY)
+    if (!Array.isArray(value)) {
+      for (const key of LEGACY_STORAGE_KEYS) {
+        value = await getStorageValue<Partial<Subscription>[]>(key)
+        if (Array.isArray(value)) break
+      }
+    }
     return Array.isArray(value) ? value.map(normalize) : []
   } catch (error) {
     console.error("读取订阅失败", error)
@@ -159,14 +177,20 @@ export async function loadSubscriptions(): Promise<Subscription[]> {
 }
 
 export async function saveSubscriptions(items: Subscription[]): Promise<void> {
-  await Storage.set(STORAGE_KEY, items, { shared: false })
-  await Storage.set(STORAGE_KEY, items, { shared: true })
+  const normalized = items.map(normalize)
+  await Storage.set(STORAGE_KEY, normalized, { shared: false })
+  await Storage.set(STORAGE_KEY, normalized, { shared: true })
 }
 
 export async function loadSettings(): Promise<AppSettings> {
   try {
-    let value = await Storage.get<Partial<AppSettings>>(SETTINGS_KEY)
-    if (!value || typeof value !== "object") value = await Storage.get<Partial<AppSettings>>(LEGACY_SETTINGS_KEY)
+    let value = await getStorageValue<Partial<AppSettings>>(SETTINGS_KEY)
+    if (!value || typeof value !== "object") {
+      for (const key of LEGACY_SETTINGS_KEYS) {
+        value = await getStorageValue<Partial<AppSettings>>(key)
+        if (value && typeof value === "object") break
+      }
+    }
     if (value && typeof value === "object") {
       return {
         ...DEFAULT_SETTINGS,
@@ -184,6 +208,7 @@ export async function loadSettings(): Promise<AppSettings> {
 
 export async function saveSettings(settings: AppSettings): Promise<void> {
   await Storage.set(SETTINGS_KEY, settings, { shared: false })
+  await Storage.set(SETTINGS_KEY, settings, { shared: true })
 }
 
 export function cycleLabel(cycle: BillingCycle): string {
@@ -210,10 +235,6 @@ export function monthlyEquivalent(item: Subscription): number {
   return item.active ? item.price * cycleMultiplier(item.cycle) / 12 : 0
 }
 
-export function monthlyCost(items: Subscription[]): number {
-  return activeItems(items).reduce((sum, item) => sum + monthlyEquivalent(item), 0)
-}
-
 export function annualEquivalent(item: Subscription): number {
   return item.active ? item.price * cycleMultiplier(item.cycle) : 0
 }
@@ -221,6 +242,10 @@ export function annualEquivalent(item: Subscription): number {
 export function activeItems(items: Subscription[]): Subscription[] {
   const now = dateOnly(Date.now())
   return items.filter(item => item.active && (!item.endDate || item.endDate >= now))
+}
+
+export function monthlyCost(items: Subscription[]): number {
+  return activeItems(items).reduce((sum, item) => sum + monthlyEquivalent(item), 0)
 }
 
 export function costByCurrency(items: Subscription[], annual = false): Record<string, number> {
@@ -262,8 +287,10 @@ export function daysUntil(timestamp: number): number {
 }
 
 export function effectiveDueDate(item: Subscription): number {
-  if (item.trialEndDate && daysUntil(item.trialEndDate) >= 0) return item.trialEndDate
-  return item.nextBillingDate
+  const dates = [item.nextBillingDate]
+  if (item.trialEndDate && daysUntil(item.trialEndDate) >= 0) dates.push(item.trialEndDate)
+  if (item.endDate) dates.push(item.endDate)
+  return Math.min(...dates.filter(value => Number.isFinite(value) && value > 0))
 }
 
 export function remainingDays(item: Subscription): number {
@@ -290,14 +317,6 @@ export function remainingProgress(item: Subscription): number {
   const total = Math.max(DAY, end - start)
   const remaining = Math.max(0, end - dateOnly(Date.now()))
   return Math.max(0, Math.min(1, remaining / total))
-}
-
-export function dueText(timestamp: number): string {
-  const days = daysUntil(timestamp)
-  if (days < 0) return `已逾期 ${Math.abs(days)} 天`
-  if (days === 0) return "今天到期"
-  if (days === 1) return "明天到期"
-  return `${days} 天后到期`
 }
 
 export function sortByNextBilling(items: Subscription[]): Subscription[] {
