@@ -6,7 +6,7 @@
   "contributors": [],
   "name": "订阅管理",
   "color": "rgba(55, 125, 255, 1)",
-  "runInApp": false,
+  "runInApp": true,
   "icon": "calendar.badge.clock",
   "remoteResource": null,
   "version": "1.0.0",
