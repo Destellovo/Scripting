@@ -33,7 +33,6 @@ import {
   Button,
   ColorPicker,
   DatePicker,
-  Dialog,
   HStack,
   Image,
   List,
@@ -165,6 +164,7 @@ function EditorPage({
   const [error, setError] = useState("")
   const [hasTrial, setHasTrial] = useState(!!initial.trialEndDate)
   const [hasEndDate, setHasEndDate] = useState(!!initial.endDate)
+  const [deleteArmed, setDeleteArmed] = useState(false)
 
   function update(patch: Partial<Subscription>): void {
     setItem(previous => ({ ...previous, ...patch }))
@@ -192,18 +192,17 @@ function EditorPage({
     }
   }
 
-  async function remove(): Promise<void> {
-    const confirmed = await Dialog.confirm({
-      title: "删除订阅",
-      message: `确定删除“${item.name || "未命名订阅"}”吗？`,
-      cancelLabel: "取消",
-      confirmLabel: "删除",
-    })
-    if (!confirmed) return
+  function remove(): void {
+    if (!deleteArmed) {
+      setDeleteArmed(true)
+      setError("再次点击“确认删除”将永久删除此订阅")
+      return
+    }
     try {
       onDelete(item.id)
       onBack()
     } catch (deleteError) {
+      setDeleteArmed(false)
       setError(`删除失败：${String(deleteError)}`)
     }
   }
@@ -407,10 +406,18 @@ function EditorPage({
         action={markPaid}
       />
       <Button
-        title="删除此订阅"
+        title={deleteArmed ? "确认删除" : "删除此订阅"}
+        systemImage={deleteArmed ? "trash.fill" : "trash"}
         role="destructive"
         action={remove}
       />
+      {deleteArmed ? <Button
+        title="取消删除"
+        action={() => {
+          setDeleteArmed(false)
+          setError("")
+        }}
+      /> : null}
     </Section> : null}
   </List>
 }
@@ -523,7 +530,9 @@ function HomePage({
   }
 
   function remove(id: string): void {
-    persist(items.filter(item => item.id !== id))
+    const next = items.filter(item => item.id !== id)
+    persist(next)
+    void rescheduleNotifications(next, settings)
   }
 
   if (editing) {
