@@ -19,6 +19,12 @@ export type Subscription = {
   active: boolean
 }
 
+export type ExchangeRateTable = {
+  base: "CNY"
+  updatedAt: number
+  rates: Record<string, number>
+}
+
 export type AppSettings = {
   defaultCurrency: string
   defaultReminderDays: number
@@ -33,7 +39,11 @@ export type CatalogItem = {
 }
 
 export const CATEGORIES = ["娱乐", "效率", "教育", "云服务", "健身", "阅读", "其他"]
-export const CURRENCIES = ["CNY", "USD", "HKD", "TWD", "JPY", "EUR", "GBP"]
+export const CURRENCIES = [
+  "CNY", "USD", "HKD", "TWD", "JPY", "EUR", "GBP",
+  "TRY", "ARS", "INR", "BRL", "RUB", "UAH", "IDR", "PHP",
+  "MYR", "THB", "VND", "KRW", "MXN", "PKR", "EGP", "ZAR", "PLN",
+]
 export const REMINDER_OPTIONS = [0, 1, 3, 7, 14]
 export const ICON_OPTIONS = [
   "creditcard.fill", "music.note", "play.rectangle.fill", "cloud.fill",
@@ -74,6 +84,9 @@ const DAY = 86_400_000
 const DATA_DIR = `${FileManager.appGroupDocumentsDirectory}/subscription_manager_v2`
 const SUBSCRIPTIONS_PATH = `${DATA_DIR}/subscriptions.json`
 const SETTINGS_PATH = `${DATA_DIR}/settings.json`
+const EXCHANGE_RATES_PATH = `${DATA_DIR}/exchange_rates.json`
+const EXCHANGE_RATE_URL = "https://open.er-api.com/v6/latest/CNY"
+const EXCHANGE_RATE_MAX_AGE = 12 * 60 * 60 * 1000
 
 export function dateOnly(timestamp: number): number {
   const date = new Date(timestamp)
@@ -258,6 +271,76 @@ export function formatCostSummary(
   return entries
     .map(([currency, amount]) => formatMoney(amount, currency))
     .join("  ·  ")
+}
+
+export function loadExchangeRates(): ExchangeRateTable | null {
+  const cached = readJSON<Partial<ExchangeRateTable>>(EXCHANGE_RATES_PATH)
+  if (!cached || !cached.rates || typeof cached.updatedAt !== "number") return null
+  return {
+    base: "CNY",
+    updatedAt: cached.updatedAt,
+    rates: cached.rates as Record<string, number>,
+  }
+}
+
+export async function refreshExchangeRates(force = false): Promise<ExchangeRateTable | null> {
+  const cached = loadExchangeRates()
+  if (!force && cached && Date.now() - cached.updatedAt < EXCHANGE_RATE_MAX_AGE) {
+    return cached
+  }
+  try {
+    const response = await fetch(EXCHANGE_RATE_URL)
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const data = await response.json() as { result?: string; rates?: Record<string, number> }
+    if (data.result !== "success" || !data.rates) throw new Error("汇率数据无效")
+    const table: ExchangeRateTable = {
+      base: "CNY",
+      updatedAt: Date.now(),
+      rates: { ...data.rates, CNY: 1 },
+    }
+    writeJSON(EXCHANGE_RATES_PATH, table)
+    return table
+  } catch (error) {
+    console.error("更新汇率失败", error)
+    return cached
+  }
+}
+
+export function convertToCNY(
+  amount: number,
+  currency: string,
+  rates: ExchangeRateTable | null,
+): number | null {
+  if (currency === "CNY") return amount
+  const rate = rates?.rates[currency]
+  return rate && Number.isFinite(rate) && rate > 0 ? amount / rate : null
+}
+
+export function convertedCost(
+  items: Subscription[],
+  rates: ExchangeRateTable | null,
+  annual = false,
+): number | null {
+  let total = 0
+  for (const [currency, amount] of Object.entries(costByCurrency(items, annual))) {
+    const value = convertToCNY(amount, currency, rates)
+    if (value === null) return null
+    total += value
+  }
+  return total
+}
+
+export function formatConvertedCost(
+  items: Subscription[],
+  rates: ExchangeRateTable | null,
+  annual = false,
+): string {
+  const total = convertedCost(items, rates, annual)
+  if (total !== null) return formatMoney(total, "CNY")
+  const currencies = Object.keys(costByCurrency(items, annual))
+  return currencies.every(currency => currency === "CNY")
+    ? formatMoney(costByCurrency(items, annual).CNY || 0, "CNY")
+    : "正在获取汇率…"
 }
 
 export function formatDate(timestamp: number | null): string {

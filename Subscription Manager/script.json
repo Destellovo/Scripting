@@ -9,6 +9,6 @@
   "runInApp": true,
   "icon": "calendar.badge.clock",
   "remoteResource": null,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "SF Symbols 订阅管理、到期提醒与进度 Widget"
 }

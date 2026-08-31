@@ -18,14 +18,24 @@ function ProgressBar({ item, width }: { item: Subscription; width: number }) {
   </HStack>
 }
 
+function SubscriptionItem({ item, progressWidth }: { item: Subscription; progressWidth: number }) {
+  return <HStack spacing={7}>
+    <IconView item={item} />
+    <VStack alignment="leading" spacing={2} frame={{ maxWidth: "infinity" }}>
+      <Text font="caption" fontWeight="semibold" lineLimit={1}>{item.name || "未命名订阅"}</Text>
+      <ProgressBar item={item} width={progressWidth} />
+    </VStack>
+  </HStack>
+}
+
 function WidgetView() {
   const items = sortByNextBilling(activeItems(loadSubscriptions()))
-  const max = Widget.family === "systemSmall" ? 1 : Widget.family === "systemLarge" ? 4 : 2
+  const max = Widget.family === "systemSmall" ? 2 : Widget.family === "systemMedium" ? 4 : 6
   const visible = items.slice(0, max)
   return <Button intent={RefreshSubscriptionIntent(undefined)} buttonStyle="plain" modifiers={modifiers().widgetBackground({ light: "#F5F7FF", dark: "#1C1C1E" }).frame({ maxWidth: "infinity", maxHeight: "infinity" })}>
     <VStack alignment="leading" spacing={7} safeAreaPadding={12}>
-      <HStack><Image systemName="calendar.badge.clock" foregroundStyle="systemBlue" font={16} /><Text font="headline" fontWeight="semibold">订阅到期</Text><Spacer /><Text font="caption" foregroundStyle="secondaryLabel">{items.length} 项</Text></HStack>
-      {visible.length === 0 ? <Text font="caption" foregroundStyle="secondaryLabel">暂无有效订阅</Text> : visible.map(item => <HStack key={item.id} spacing={7}><IconView item={item} /><VStack alignment="leading" spacing={2} frame={{ maxWidth: "infinity" }}><Text font="caption" fontWeight="semibold" lineLimit={1}>{item.name || "未命名订阅"}</Text><ProgressBar item={item} width={Widget.family === "systemSmall" ? 86 : 120} /></VStack></HStack>)}
+      <HStack><Image systemName="calendar.badge.clock" foregroundStyle="systemBlue" font={16} /><Text font="caption" fontWeight="semibold">Due Date</Text><Spacer /><Text font="caption" foregroundStyle="secondaryLabel">{items.length} 项</Text></HStack>
+      {visible.length === 0 ? <Text font="caption" foregroundStyle="secondaryLabel">暂无有效订阅</Text> : Widget.family === "systemMedium" ? <VStack spacing={5}><HStack spacing={10}>{visible.slice(0, 2).map(item => <VStack key={item.id} frame={{ maxWidth: "infinity" }}><SubscriptionItem item={item} progressWidth={90} /></VStack>)}</HStack><HStack spacing={10}>{visible.slice(2, 4).map(item => <VStack key={item.id} frame={{ maxWidth: "infinity" }}><SubscriptionItem item={item} progressWidth={90} /></VStack>)}</HStack></VStack> : visible.map(item => <SubscriptionItem key={item.id} item={item} progressWidth={Widget.family === "systemSmall" ? 86 : 120} />)}
       {visible[0] ? <Text font="caption" foregroundStyle="secondaryLabel">最近：{formatDate(effectiveDueDate(visible[0]))}</Text> : null}
     </VStack>
   </Button>

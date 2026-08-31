@@ -1,5 +1,6 @@
 import {
   AppSettings,
+  ExchangeRateTable,
   CATEGORIES,
   CURRENCIES,
   DEFAULT_SETTINGS,
@@ -9,17 +10,20 @@ import {
   Subscription,
   activeItems,
   advanceBillingDate,
+  convertToCNY,
   createSubscription,
   cycleLabel,
   dateOnly,
   daysUntil,
   effectiveDueDate,
-  formatCostSummary,
+  formatConvertedCost,
   formatDate,
   formatMoney,
+  loadExchangeRates,
   loadSettings,
   loadSubscriptions,
   monthlyCost,
+  refreshExchangeRates,
   saveSettings,
   saveSubscriptions,
   sortByNextBilling,
@@ -66,7 +70,7 @@ function IconView({ item, size = 28 }: {
   />
 }
 
-function Summary({ items }: { items: Subscription[] }) {
+function Summary({ items, rates }: { items: Subscription[]; rates: ExchangeRateTable | null }) {
   const active = activeItems(items)
   const next = sortByNextBilling(active)[0]
   const dueSoon = active.filter(item => {
@@ -80,7 +84,7 @@ function Summary({ items }: { items: Subscription[] }) {
         本月预计支出
       </Text>
       <Text font="title" fontWeight="bold">
-        {formatCostSummary(items)}
+        {formatConvertedCost(items, rates)}
       </Text>
       <HStack>
         <Text font="caption" foregroundStyle="secondaryLabel">
@@ -488,6 +492,7 @@ function PopularPicker({
 function HomePage({
   items,
   settings,
+  rates,
   onItemsChanged,
   onOpenSettings,
   onOpenStats,
@@ -495,6 +500,7 @@ function HomePage({
 }: {
   items: Subscription[]
   settings: AppSettings
+  rates: ExchangeRateTable | null
   onItemsChanged: (items: Subscription[]) => void
   onOpenSettings: () => void
   onOpenStats: () => void
@@ -563,7 +569,7 @@ function HomePage({
       />,
     }}
   >
-    <Summary items={items} />
+    <Summary items={items} rates={rates} />
     <Section header={<Text>我的订阅</Text>}>
       {active.length === 0 ? <Text foregroundStyle="secondaryLabel">
         还没有订阅，点击下方添加
@@ -595,19 +601,26 @@ function HomePage({
 
 function StatisticsPage({
   items,
+  rates,
   onBack,
   onClose,
 }: {
   items: Subscription[]
+  rates: ExchangeRateTable | null
   onBack: () => void
   onClose: () => void
 }) {
   const active = activeItems(items)
+  const categoryRatesReady = active.every(item => (
+    convertToCNY(1, item.currency, rates) !== null
+  ))
   const byCategory: Record<string, number> = {}
   for (const item of active) {
+    const monthly = monthlyCost([item])
+    const converted = convertToCNY(monthly, item.currency, rates)
     byCategory[item.category] = (
       byCategory[item.category] || 0
-    ) + monthlyCost([item])
+    ) + (converted ?? monthly)
   }
   const rows = Object.entries(byCategory)
     .sort((a, b) => b[1] - a[1])
@@ -625,25 +638,24 @@ function StatisticsPage({
         每月估算
       </Text>
       <Text font="title" fontWeight="bold">
-        {formatCostSummary(active)}
+        {formatConvertedCost(active, rates)}
       </Text>
       <Text font="caption" foregroundStyle="secondaryLabel">
         每年估算
       </Text>
       <Text font="headline">
-        {formatCostSummary(active, true)}
+        {formatConvertedCost(active, rates, true)}
       </Text>
     </Section>
     <Section header={<Text>按分类</Text>}>
-      {rows.length === 0 ? <Text foregroundStyle="secondaryLabel">
+      {!categoryRatesReady ? <Text foregroundStyle="secondaryLabel">
+        正在获取汇率…
+      </Text> : rows.length === 0 ? <Text foregroundStyle="secondaryLabel">
         暂无数据
       </Text> : rows.map(([category, amount]) => <HStack key={category}>
         <Text>{category}</Text>
         <Spacer />
-        <Text>{formatMoney(
-          amount,
-          active.find(item => item.category === category)?.currency || "CNY",
-        )}</Text>
+        <Text>{formatMoney(amount, "CNY")}</Text>
       </HStack>)}
     </Section>
   </List>
@@ -728,12 +740,17 @@ function App() {
   const [page, setPage] = useState<"home" | "settings" | "stats">("home")
   const [items, setItems] = useState<Subscription[]>([])
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
+  const [rates, setRates] = useState<ExchangeRateTable | null>(null)
   const [error, setError] = useState("")
 
   useEffect(() => {
     try {
       setItems(loadSubscriptions())
       setSettings(loadSettings())
+      setRates(loadExchangeRates())
+      void refreshExchangeRates().then(updated => {
+        if (updated) setRates(updated)
+      })
     } catch (loadError) {
       setError(String(loadError))
     }
@@ -762,6 +779,7 @@ function App() {
   if (page === "stats") {
     return <StatisticsPage
       items={items}
+      rates={rates}
       onBack={() => setPage("home")}
       onClose={dismiss}
     />
@@ -770,6 +788,7 @@ function App() {
   return <HomePage
     items={items}
     settings={settings}
+    rates={rates}
     onItemsChanged={setItems}
     onOpenSettings={() => setPage("settings")}
     onOpenStats={() => setPage("stats")}
