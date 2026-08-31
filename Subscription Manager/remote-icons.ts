@@ -13,10 +13,10 @@ function validURL(value: unknown): value is string {
 
 export async function loadIconLibraryURLs(): Promise<string[]> {
   try {
-    const value = await Storage.get<string[]>(LIBRARIES_KEY)
+    const value = await Storage.get<string[]>(LIBRARIES_KEY, { shared: false })
     if (Array.isArray(value)) {
-      const urls = value.filter(validURL)
-      if (urls.length > 0) return urls
+      const valid = value.filter(validURL)
+      if (valid.length > 0) return valid
     }
   } catch { /* 使用默认图标库 */ }
   return [DEFAULT_ICON_LIBRARY_URL]
@@ -24,18 +24,19 @@ export async function loadIconLibraryURLs(): Promise<string[]> {
 
 export async function saveIconLibraryURLs(urls: string[]): Promise<void> {
   const valid = Array.from(new Set(urls.filter(validURL)))
-  await Storage.set(LIBRARIES_KEY, valid.length > 0 ? valid : [DEFAULT_ICON_LIBRARY_URL])
+  const value = valid.length > 0 ? valid : [DEFAULT_ICON_LIBRARY_URL]
+  await Storage.set(LIBRARIES_KEY, value, { shared: false })
 }
 
 export async function loadCachedRemoteIcons(): Promise<RemoteIcon[]> {
   try {
-    const value = await Storage.get<RemoteIcon[]>(CACHE_KEY)
+    const value = await Storage.get<RemoteIcon[]>(CACHE_KEY, { shared: false })
     return Array.isArray(value) ? value : []
   } catch { return [] }
 }
 
 export async function saveCachedRemoteIcons(icons: RemoteIcon[]): Promise<void> {
-  await Storage.set(CACHE_KEY, icons)
+  await Storage.set(CACHE_KEY, icons, { shared: false })
 }
 
 export async function fetchIconLibrary(url: string): Promise<RemoteIcon[]> {
