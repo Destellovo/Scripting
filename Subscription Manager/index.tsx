@@ -16,11 +16,7 @@ import {
   formatCostSummary,
   formatDate,
   formatMoney,
-  loadSettings,
-  loadSubscriptions,
   monthlyCost,
-  saveSettings,
-  saveSubscriptions,
   sortByNextBilling,
 } from "./model"
 import { notificationSummary, rescheduleNotifications } from "./notifications"
@@ -55,6 +51,7 @@ import {
   TextField,
   Toggle,
   VStack,
+  useEffect,
   useState,
 } from "scripting"
 
@@ -93,7 +90,6 @@ function Summary({ items }: { items: Subscription[] }) {
     const days = daysUntil(item.nextBillingDate)
     return days >= 0 && days <= 7
   }).length
-
   return <Section>
     <VStack alignment="leading" spacing={8}>
       <Text font="caption" foregroundStyle="secondaryLabel">本月预计支出</Text>
@@ -101,13 +97,9 @@ function Summary({ items }: { items: Subscription[] }) {
       <HStack>
         <Text font="caption" foregroundStyle="secondaryLabel">{active.length} 项有效订阅</Text>
         <Spacer />
-        <Text font="caption" foregroundStyle={dueSoon > 0 ? "systemOrange" : "secondaryLabel"}>
-          {dueSoon > 0 ? `${dueSoon} 项即将扣款` : "未来 7 天无扣款"}
-        </Text>
+        <Text font="caption" foregroundStyle={dueSoon > 0 ? "systemOrange" : "secondaryLabel"}>{dueSoon > 0 ? `${dueSoon} 项即将扣款` : "未来 7 天无扣款"}</Text>
       </HStack>
-      {next ? <Text font="caption" foregroundStyle="secondaryLabel">
-        最近：{next.name || "未命名订阅"} · {formatDate(next.nextBillingDate)}
-      </Text> : null}
+      {next ? <Text font="caption" foregroundStyle="secondaryLabel">最近：{next.name || "未命名订阅"} · {formatDate(next.nextBillingDate)}</Text> : null}
     </VStack>
   </Section>
 }
@@ -168,7 +160,7 @@ function SubscriptionEditor({
   const [error, setError] = useState("")
   const [hasTrial, setHasTrial] = useState(!!initial.trialEndDate)
   const [hasEndDate, setHasEndDate] = useState(!!initial.endDate)
-  const [customIcons, setCustomIcons] = useState<CustomIcon[]>(() => loadCustomIcons())
+  const [customIcons, setCustomIcons] = useState<CustomIcon[]>(() => [])
   const [remoteIcons, setRemoteIcons] = useState<RemoteIcon[]>(() => [])
   const [remoteQuery, setRemoteQuery] = useState("")
   const [remoteLoading, setRemoteLoading] = useState(false)
@@ -176,8 +168,19 @@ function SubscriptionEditor({
   const iconIsCustom = item.icon.startsWith("custom:") && !!item.iconPath
   const iconIsRemote = item.icon.startsWith("remote:") && !!item.iconURL
 
+  useEffect(() => {
+    loadLocalIcons()
+    loadIconLibraryURLs().then(urls => {
+      if (urls.length > 0) setIconLibraryURL(urls[0])
+    }).catch(() => {})
+  }, [])
+
   function update(patch: Partial<Subscription>) {
     setItem(previous => ({ ...previous, ...patch }))
+  }
+
+  async function loadLocalIcons() {
+    try { setCustomIcons(await loadCustomIcons()) } catch { /* 使用空图标库 */ }
   }
 
   async function addIcons() {
@@ -244,8 +247,8 @@ function SubscriptionEditor({
     update({ icon: value, iconURL: "", iconPath: "" })
   }
 
-  function removeIcon(icon: CustomIcon) {
-    const icons = deleteCustomIcon(icon.id)
+  async function removeIcon(icon: CustomIcon) {
+    const icons = await deleteCustomIcon(icon.id)
     setCustomIcons(icons)
     if (item.icon === `custom:${icon.id}`) update({ icon: "creditcard.fill", iconPath: "", iconURL: "" })
   }
@@ -352,8 +355,10 @@ function SubscriptionEditor({
           title: "删除图标",
           actions: customIcons.map(icon => ({ label: icon.name, destructive: true })),
         })
-        if (index !== null && customIcons[index]) removeIcon(customIcons[index])
+        if (index !== null && customIcons[index]) await removeIcon(customIcons[index])
       }} /> : null}
+      <Button title="更换 Raw 图标库" systemImage="link" action={changeIconLibrary} />
+      <Button title="恢复默认图标库" systemImage="arrow.counterclockwise" action={restoreDefaultIconLibrary} />
       <Button
         title={remoteLoading ? "正在读取远程图标库…" : "读取远程图标库"}
         systemImage="arrow.clockwise"
@@ -417,11 +422,14 @@ function PopularPicker({ onPicked, onClose }: { onPicked: (item: Subscription) =
   const close = onClose || dismiss
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState("全部")
-  const settings = loadSettings()
+  const [settings, setSettings] = useState<AppSettings>({ defaultCurrency: "CNY", defaultReminderDays: 3, notificationsEnabled: true })
   const filtered = POPULAR_SERVICES.filter(service =>
     (!query || service.name.toLowerCase().includes(query.toLowerCase())) &&
     (category === "全部" || service.category === category)
   )
+
+  // 加载失败时仍可使用列表；页面本身不会因为设置读取失败而退出。
+  loadSettings().then(setSettings).catch(() => {})
   async function pick(service: typeof POPULAR_SERVICES[number]) {
     await onPicked(createSubscription(settings, service))
     close()
@@ -453,26 +461,32 @@ function PopularPicker({ onPicked, onClose }: { onPicked: (item: Subscription) =
 }
 
 function Home({ onOpenSettings, onOpenStats, onClose }: { onOpenSettings: () => void; onOpenStats: () => void; onClose: () => void }) {
-  const [items, setItems] = useState<Subscription[]>(() => loadSubscriptions())
+  const [items, setItems] = useState<Subscription[]>(() => [])
+  const [dataLoaded, setDataLoaded] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [showPopular, setShowPopular] = useState(false)
+
+  useEffect(() => {
+    loadSubscriptions().then(value => { setItems(value); setDataLoaded(true) }).catch(() => setDataLoaded(true))
+  }, [])
 
   function saveSubscription(item: Subscription) {
     const next = items.some(existing => existing.id === item.id)
       ? items.map(existing => existing.id === item.id ? item : existing)
       : [...items, item]
     setItems(next)
-    saveSubscriptions(next)
-    rescheduleNotifications(next, loadSettings()).catch(error => console.error("刷新提醒失败", error))
+    void saveSubscriptions(next)
+    loadSettings().then(settings => rescheduleNotifications(next, settings)).catch(error => console.error("刷新提醒失败", error))
   }
   function removeSubscriptionItem(id: string) {
     const next = items.filter(item => item.id !== id)
     setItems(next)
-    saveSubscriptions(next)
-    rescheduleNotifications(next, loadSettings()).catch(error => console.error("刷新提醒失败", error))
+    void saveSubscriptions(next)
+    loadSettings().then(settings => rescheduleNotifications(next, settings)).catch(error => console.error("刷新提醒失败", error))
   }
 
-  if (showAdd) return <SubscriptionEditor initial={createSubscription(loadSettings())} isNew={true}
+  if (!dataLoaded) return <List navigationTitle="订阅管理"><Section><Text>正在读取订阅…</Text></Section></List>
+  if (showAdd) return <SubscriptionEditor initial={createSubscription({ defaultCurrency: "CNY", defaultReminderDays: 3, notificationsEnabled: true })} isNew={true}
     onSaved={item => { saveSubscription(item); setShowAdd(false) }}
     onDeleted={() => setShowAdd(false)} onClose={() => setShowAdd(false)} />
   if (showPopular) return <PopularPicker onPicked={item => { saveSubscription(item); setShowPopular(false) }} onClose={() => setShowPopular(false)} />
@@ -494,10 +508,10 @@ function Home({ onOpenSettings, onOpenStats, onClose }: { onOpenSettings: () => 
   </List>
 }
 
-function StatisticsPage({ onBack, onClose }: { onBack: () => void; onClose: () => void }) {
-  const items = activeItems(loadSubscriptions())
+function StatisticsPage({ items, onBack, onClose }: { items: Subscription[]; onBack: () => void; onClose: () => void }) {
+  const active = activeItems(items)
   const byCategory: Record<string, number> = {}
-  for (const item of items) byCategory[item.category] = (byCategory[item.category] || 0) + monthlyCost([item])
+  for (const item of active) byCategory[item.category] = (byCategory[item.category] || 0) + monthlyCost([item])
   const rows = Object.entries(byCategory).sort((a, b) => b[1] - a[1])
   const marks = rows.map(([category, amount]) => ({ category, value: amount }))
   return <List navigationTitle="统计" navigationBarTitleDisplayMode="inline" toolbar={{
@@ -507,31 +521,32 @@ function StatisticsPage({ onBack, onClose }: { onBack: () => void; onClose: () =
     <Section>
       <VStack alignment="leading" spacing={8}>
         <Text font="caption" foregroundStyle="secondaryLabel">每月估算</Text>
-        <Text font="title" fontWeight="bold">{formatCostSummary(items)}</Text>
+        <Text font="title" fontWeight="bold">{formatCostSummary(active)}</Text>
         <Text font="caption" foregroundStyle="secondaryLabel">每年估算（按周期折算）</Text>
-        <Text font="headline">{formatCostSummary(items, true)}</Text>
+        <Text font="headline">{formatCostSummary(active, true)}</Text>
       </VStack>
     </Section>
     {marks.length > 0 ? <Section header={<Text>费用占比</Text>}>
       <Chart frame={{ height: 220 }}><DonutChart marks={marks} /></Chart>
     </Section> : null}
     <Section header={<Text>按分类</Text>}>
-      {rows.length === 0 ? <Text foregroundStyle="secondaryLabel">暂无数据</Text> : rows.map(([category, amount]) => <HStack key={category}><Text>{category}</Text><Spacer /><Text>{formatMoney(amount, items.find(x => x.category === category)?.currency ?? "CNY")}</Text></HStack>)}
+      {rows.length === 0 ? <Text foregroundStyle="secondaryLabel">暂无数据</Text> : rows.map(([category, amount]) => <HStack key={category}><Text>{category}</Text><Spacer /><Text>{formatMoney(amount, active.find(x => x.category === category)?.currency ?? "CNY")}</Text></HStack>)}
     </Section>
   </List>
 }
 
-function SettingsPage({ onBack, onClose }: { onBack: () => void; onClose: () => void }) {
-  const [settings, setSettings] = useState<AppSettings>(() => loadSettings())
+function SettingsPage({ items, onBack, onClose }: { items: Subscription[]; onBack: () => void; onClose: () => void }) {
+  const [settings, setSettings] = useState<AppSettings>({ defaultCurrency: "CNY", defaultReminderDays: 3, notificationsEnabled: true })
   const [notice, setNotice] = useState("")
+  useEffect(() => { loadSettings().then(setSettings).catch(() => {}) }, [])
   function update(patch: Partial<AppSettings>) {
     const next = { ...settings, ...patch }
     setSettings(next)
-    saveSettings(next)
+    void saveSettings(next)
   }
   async function refreshReminders() {
-    const count = await rescheduleNotifications(loadSubscriptions(), settings)
-    setNotice(count > 0 ? `已安排 ${count} 条续费提醒` : notificationSummary(loadSubscriptions(), settings))
+    const count = await rescheduleNotifications(items, settings)
+    setNotice(count > 0 ? `已安排 ${count} 条续费提醒` : notificationSummary(items, settings))
   }
   return <List navigationTitle="设置" navigationBarTitleDisplayMode="inline" toolbar={{
     topBarLeading: <Button title="返回" action={onBack} />,
@@ -546,18 +561,22 @@ function SettingsPage({ onBack, onClose }: { onBack: () => void; onClose: () => 
       <Button title="重新安排所有提醒" systemImage="bell.badge" action={refreshReminders} />
       {notice ? <Text font="caption" foregroundStyle="secondaryLabel">{notice}</Text> : null}
     </Section>
-    <Section footer={<Text>数据保存在 Scripting 本地存储中。</Text>}><Text>已保存 {loadSubscriptions().length} 项订阅</Text></Section>
+    <Section footer={<Text>数据保存在 Scripting 本地存储中。</Text>}><Text>已保存 {items.length} 项订阅</Text></Section>
   </List>
 }
 
 function App() {
   const dismiss = Navigation.useDismiss()
   const [page, setPage] = useState<"home" | "settings" | "stats">("home")
-  const [version, setVersion] = useState(0)
-  const refresh = () => setVersion(version + 1)
-  if (page === "settings") return <SettingsPage onBack={() => setPage("home")} onClose={dismiss} />
-  if (page === "stats") return <StatisticsPage onBack={() => setPage("home")} onClose={dismiss} />
-  return <Home key={version} onOpenSettings={() => setPage("settings")} onOpenStats={() => setPage("stats")} onClose={dismiss} />
+  const [items, setItems] = useState<Subscription[]>(() => [])
+  const [loaded, setLoaded] = useState(false)
+  useEffect(() => {
+    loadSubscriptions().then(value => { setItems(value); setLoaded(true) }).catch(() => setLoaded(true))
+  }, [])
+  if (!loaded) return <List navigationTitle="订阅管理"><Section><Text>正在读取订阅…</Text></Section></List>
+  if (page === "settings") return <SettingsPage items={items} onBack={() => setPage("home")} onClose={dismiss} />
+  if (page === "stats") return <StatisticsPage items={items} onBack={() => setPage("home")} onClose={dismiss} />
+  return <Home key={String(items.length)} onOpenSettings={() => setPage("settings")} onOpenStats={() => setPage("stats")} onClose={dismiss} />
 }
 
 async function run() {
