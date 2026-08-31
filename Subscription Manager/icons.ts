@@ -7,20 +7,28 @@ export type CustomIcon = {
   createdAt: number
 }
 
-const ICONS_KEY = "subscription_manager_custom_icons_v1"
+const ICONS_KEY = "subscription_manager_custom_icons_v2"
+const LEGACY_ICONS_KEY = "subscription_manager_custom_icons_v1"
 const ICON_DIR_NAME = "subscription_icons"
 
-export function loadCustomIcons(): CustomIcon[] {
+export async function loadCustomIcons(): Promise<CustomIcon[]> {
   try {
-    const value = Storage.get<CustomIcon[]>(ICONS_KEY)
-    return Array.isArray(value) ? value.filter(icon => !!icon.id && !!icon.filePath && FileManager.existsSync(icon.filePath)) : []
-  } catch {
+    let value = await Storage.get<CustomIcon[]>(ICONS_KEY, { shared: false })
+    if (!Array.isArray(value)) value = await Storage.get<CustomIcon[]>(ICONS_KEY, { shared: true })
+    if (!Array.isArray(value)) value = await Storage.get<CustomIcon[]>(LEGACY_ICONS_KEY, { shared: false })
+    if (!Array.isArray(value)) value = await Storage.get<CustomIcon[]>(LEGACY_ICONS_KEY, { shared: true })
+    return Array.isArray(value)
+      ? value.filter(icon => !!icon?.id && !!icon?.filePath && FileManager.existsSync(icon.filePath))
+      : []
+  } catch (error) {
+    console.error("读取本地图标失败", error)
     return []
   }
 }
 
-function saveCustomIcons(icons: CustomIcon[]): void {
-  Storage.set(ICONS_KEY, icons)
+async function saveCustomIcons(icons: CustomIcon[]): Promise<void> {
+  await Storage.set(ICONS_KEY, icons, { shared: false })
+  await Storage.set(ICONS_KEY, icons, { shared: true })
 }
 
 export async function importCustomIcons(): Promise<CustomIcon[]> {
@@ -34,7 +42,7 @@ export async function importCustomIcons(): Promise<CustomIcon[]> {
   const directory = Path.join(FileManager.appGroupDocumentsDirectory, ICON_DIR_NAME)
   if (!FileManager.existsSync(directory)) FileManager.createDirectorySync(directory, true)
 
-  const icons = loadCustomIcons()
+  const icons = await loadCustomIcons()
   for (const source of paths) {
     try {
       const image = UIImage.fromFile(source)
@@ -46,22 +54,27 @@ export async function importCustomIcons(): Promise<CustomIcon[]> {
       const data = image.toPNGData()
       if (!data) continue
       FileManager.writeAsDataSync(target, data)
-      icons.push({ id, name: originalName.replace(/\.[^.]+$/, ""), filePath: target, createdAt: Date.now() })
+      icons.push({
+        id,
+        name: originalName.replace(/\.[^.]+$/, ""),
+        filePath: target,
+        createdAt: Date.now(),
+      })
     } catch (error) {
       console.error("导入订阅图标失败", error)
     }
   }
-  saveCustomIcons(icons)
+  await saveCustomIcons(icons)
   return icons
 }
 
-export function deleteCustomIcon(id: string): CustomIcon[] {
-  const icons = loadCustomIcons()
+export async function deleteCustomIcon(id: string): Promise<CustomIcon[]> {
+  const icons = await loadCustomIcons()
   const target = icons.find(icon => icon.id === id)
   if (target && FileManager.existsSync(target.filePath)) {
     try { FileManager.removeSync(target.filePath) } catch { /* 忽略单个文件删除失败 */ }
   }
   const next = icons.filter(icon => icon.id !== id)
-  saveCustomIcons(next)
+  await saveCustomIcons(next)
   return next
 }
