@@ -291,9 +291,11 @@ function App() {
   const [page, setPage] = useState<"home" | "settings" | "stats">("home")
   const [items, setItems] = useState<Subscription[]>(() => [])
   const [loaded, setLoaded] = useState(false)
-  useEffect(() => { loadSubscriptions().then(value => { setItems(value); setLoaded(true) }).catch(() => setLoaded(true)) }, [])
+  const [loadError, setLoadError] = useState("")
+  useEffect(() => { loadSubscriptions().then(value => { setItems(value); setLoaded(true) }).catch(error => { setLoadError(String(error)); setLoaded(true) }) }, [])
   function updateItems(value: Subscription[]) { setItems(value) }
   if (!loaded) return <List navigationTitle="订阅管理"><Section><Text>正在读取订阅…</Text></Section></List>
+  if (loadError) return <List navigationTitle="订阅管理"><Section><Text foregroundStyle="systemRed">读取数据失败</Text><Text font="caption">{loadError}</Text><Button title="重试" action={() => { setLoaded(false); setLoadError(""); loadSubscriptions().then(value => { setItems(value); setLoaded(true) }).catch(error => { setLoadError(String(error)); setLoaded(true) }) }} /><Button title="关闭" action={dismiss} /></Section></List>
   if (page === "settings") return <SettingsPage items={items} onBack={() => setPage("home")} onClose={dismiss} />
   if (page === "stats") return <StatisticsPage items={items} onBack={() => setPage("home")} onClose={dismiss} />
   return <Home items={items} onItemsChanged={updateItems} onOpenSettings={() => setPage("settings")} onOpenStats={() => setPage("stats")} onClose={dismiss} />
