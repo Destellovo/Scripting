@@ -34,6 +34,7 @@ import {
   Image,
   List,
   Navigation,
+  NavigationStack,
   Picker,
   Script,
   Section,
@@ -776,7 +777,9 @@ function App() {
 }
 
 async function run() {
-  await Navigation.present({ element: <App /> })
+  await Navigation.present({
+    element: <NavigationStack><App /></NavigationStack>,
+  })
   Script.exit()
 }
 
