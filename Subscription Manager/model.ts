@@ -35,7 +35,7 @@ export type CatalogItem = {
 export const CATEGORIES = ["娱乐", "效率", "教育", "云服务", "健身", "阅读", "其他"]
 export const CURRENCIES = ["CNY", "USD", "HKD", "TWD", "JPY", "EUR", "GBP"]
 export const REMINDER_OPTIONS = [0, 1, 3, 7, 14]
-export const SYMBOL_PRESETS = [
+export const ICON_OPTIONS = [
   "creditcard.fill", "music.note", "play.rectangle.fill", "cloud.fill",
   "gamecontroller.fill", "book.fill", "figure.run", "sparkles",
   "tv.fill", "cart.fill", "graduationcap.fill", "briefcase.fill",
