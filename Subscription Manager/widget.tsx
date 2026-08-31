@@ -3,9 +3,7 @@ import { RefreshSubscriptionIntent } from "./app_intents"
 import { Button, Capsule, HStack, Image, Spacer, Text, VStack, Widget, modifiers } from "scripting"
 
 function IconView({ item, size = 22 }: { item: Subscription; size?: number }) {
-  if (item.iconPath) return <Image filePath={item.iconPath} resizable={true} scaleToFit={true} frame={{ width: size, height: size }} />
-  if (item.iconURL) return <Image imageUrl={item.iconURL} resizable={true} scaleToFit={true} frame={{ width: size, height: size }} />
-  return <Image systemName={item.icon || "creditcard.fill"} foregroundStyle={item.color || "systemBlue"} font={size - 4} />
+  return <Image systemName={item.icon || "creditcard.fill"} foregroundStyle={item.progressColor || "systemBlue"} font={size - 4} />
 }
 
 function ProgressBar({ item, width }: { item: Subscription; width: number }) {
@@ -20,8 +18,8 @@ function ProgressBar({ item, width }: { item: Subscription; width: number }) {
   </HStack>
 }
 
-async function WidgetView() {
-  const items = sortByNextBilling(activeItems(await loadSubscriptions()))
+function WidgetView() {
+  const items = sortByNextBilling(activeItems(loadSubscriptions()))
   const max = Widget.family === "systemSmall" ? 1 : Widget.family === "systemLarge" ? 4 : 2
   const visible = items.slice(0, max)
   return <Button intent={RefreshSubscriptionIntent(undefined)} buttonStyle="plain" modifiers={modifiers().widgetBackground({ light: "#F5F7FF", dark: "#1C1C1E" }).frame({ maxWidth: "infinity", maxHeight: "infinity" })}>
@@ -33,4 +31,4 @@ async function WidgetView() {
   </Button>
 }
 
-WidgetView().then(view => Widget.present(view))
+Widget.present(<WidgetView />)
