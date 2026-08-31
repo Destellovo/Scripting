@@ -42,6 +42,7 @@ import {
   Text,
   TextField,
   Toggle,
+  useEffect,
   VStack,
   useState,
 } from "scripting"
