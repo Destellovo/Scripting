@@ -13,11 +13,11 @@ export const MarkSubscriptionPaidIntent = AppIntentManager.register({
   name: "MarkSubscriptionPaidIntent",
   protocol: AppIntentProtocol.AppIntent,
   perform: async ({ id }: { id: string }) => {
-    const items = await loadSubscriptions()
+    const items = loadSubscriptions()
     const next = items.map(item => item.id === id
       ? { ...item, nextBillingDate: advanceBillingDate(item.nextBillingDate, item.cycle) }
       : item)
-    await saveSubscriptions(next)
+    saveSubscriptions(next)
     Widget.reloadAll()
   },
 })
