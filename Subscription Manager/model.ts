@@ -47,7 +47,10 @@ export const ICON_OPTIONS = [
   "gamecontroller.fill", "book.fill", "figure.run", "sparkles",
   "tv.fill", "cart.fill", "graduationcap.fill", "ellipsis.circle.fill",
 ]
-export const COLOR_OPTIONS = ["systemBlue", "systemPurple", "systemGreen", "systemOrange", "systemRed", "systemPink", "systemTeal"]
+export const COLOR_OPTIONS = [
+  "systemBlue", "systemPurple", "systemGreen", "systemOrange",
+  "systemRed", "systemPink", "systemTeal",
+]
 
 export const POPULAR_SERVICES: CatalogItem[] = [
   { name: "Netflix", category: "娱乐", icon: "play.rectangle.fill", color: "systemRed" },
@@ -78,10 +81,18 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notificationsEnabled: true,
 }
 
-const STORAGE_KEY = "subscription_manager_subscriptions_v3"
-const LEGACY_STORAGE_KEYS = ["subscription_manager_subscriptions_v2", "subscription_manager_subscriptions_v1"]
-const SETTINGS_KEY = "subscription_manager_settings_v3"
-const LEGACY_SETTINGS_KEYS = ["subscription_manager_settings_v2", "subscription_manager_settings_v1"]
+const STORAGE_KEY = "subscription_manager_subscriptions_v4"
+const LEGACY_STORAGE_KEYS = [
+  "subscription_manager_subscriptions_v3",
+  "subscription_manager_subscriptions_v2",
+  "subscription_manager_subscriptions_v1",
+]
+const SETTINGS_KEY = "subscription_manager_settings_v4"
+const LEGACY_SETTINGS_KEYS = [
+  "subscription_manager_settings_v3",
+  "subscription_manager_settings_v2",
+  "subscription_manager_settings_v1",
+]
 const DAY = 24 * 60 * 60 * 1000
 
 export function makeID(): string {
@@ -132,16 +143,20 @@ function normalize(item: Partial<Subscription>): Subscription {
     name: String(item.name || ""),
     price: Number.isFinite(Number(item.price)) ? Math.max(0, Number(item.price)) : 0,
     currency: CURRENCIES.includes(currency) ? currency : base.currency,
-    cycle: ["weekly", "monthly", "quarterly", "yearly", "oneTime"].includes(cycle) ? cycle as BillingCycle : "monthly",
+    cycle: ["weekly", "monthly", "quarterly", "yearly", "oneTime"].includes(cycle)
+      ? cycle as BillingCycle : "monthly",
     category: CATEGORIES.includes(category) ? category : "其他",
     startDate: Number(item.startDate) || base.startDate,
     nextBillingDate: Number(item.nextBillingDate) || base.nextBillingDate,
-    reminderDays: REMINDER_OPTIONS.includes(Number(item.reminderDays)) ? Number(item.reminderDays) : base.reminderDays,
+    reminderDays: REMINDER_OPTIONS.includes(Number(item.reminderDays))
+      ? Number(item.reminderDays) : base.reminderDays,
     trialEndDate: item.trialEndDate ? Number(item.trialEndDate) : null,
     endDate: item.endDate ? Number(item.endDate) : null,
     iconPath: typeof item.iconPath === "string" ? item.iconPath : "",
     iconURL: typeof item.iconURL === "string" ? item.iconURL : "",
-    progressColor: typeof item.progressColor === "string" && item.progressColor ? item.progressColor : (typeof item.color === "string" && item.color ? item.color : "systemBlue"),
+    progressColor: typeof item.progressColor === "string" && item.progressColor
+      ? item.progressColor
+      : (typeof item.color === "string" && item.color ? item.color : "systemBlue"),
     autoRenew: item.autoRenew !== false,
     active: item.active !== false,
   }
@@ -149,66 +164,79 @@ function normalize(item: Partial<Subscription>): Subscription {
 
 async function getStorageValue<T>(key: string): Promise<T | null> {
   try {
-    const privateValue = await Storage.get<T>(key, { shared: false })
-    if (privateValue != null) return privateValue
-  } catch { /* 尝试共享域 */ }
+    const value = await Storage.get<T>(key, { shared: false })
+    if (value != null) return value
+  } catch { /* 尝试共享存储 */ }
   try {
-    const sharedValue = await Storage.get<T>(key, { shared: true })
-    return sharedValue ?? null
+    const value = await Storage.get<T>(key, { shared: true })
+    return value ?? null
   } catch {
     return null
   }
 }
 
 export async function loadSubscriptions(): Promise<Subscription[]> {
-  try {
-    let value = await getStorageValue<Partial<Subscription>[]>(STORAGE_KEY)
-    if (!Array.isArray(value)) {
-      for (const key of LEGACY_STORAGE_KEYS) {
-        value = await getStorageValue<Partial<Subscription>[]>(key)
-        if (Array.isArray(value)) break
-      }
+  let value = await getStorageValue<Partial<Subscription>[]>(STORAGE_KEY)
+  if (!Array.isArray(value)) {
+    for (const key of LEGACY_STORAGE_KEYS) {
+      value = await getStorageValue<Partial<Subscription>[]>(key)
+      if (Array.isArray(value)) break
     }
-    return Array.isArray(value) ? value.map(normalize) : []
-  } catch (error) {
-    console.error("读取订阅失败", error)
-    return []
   }
+  return Array.isArray(value) ? value.map(normalize) : []
 }
 
 export async function saveSubscriptions(items: Subscription[]): Promise<void> {
   const normalized = items.map(normalize)
-  await Storage.set(STORAGE_KEY, normalized, { shared: false })
-  await Storage.set(STORAGE_KEY, normalized, { shared: true })
+  let privateError: unknown = null
+  try {
+    await Storage.set(STORAGE_KEY, normalized, { shared: false })
+  } catch (error) {
+    privateError = error
+  }
+  try {
+    await Storage.set(STORAGE_KEY, normalized, { shared: true })
+  } catch (error) {
+    console.error("共享订阅存储失败", error)
+  }
+  if (privateError) throw privateError
 }
 
 export async function loadSettings(): Promise<AppSettings> {
-  try {
-    let value = await getStorageValue<Partial<AppSettings>>(SETTINGS_KEY)
-    if (!value || typeof value !== "object") {
-      for (const key of LEGACY_SETTINGS_KEYS) {
-        value = await getStorageValue<Partial<AppSettings>>(key)
-        if (value && typeof value === "object") break
-      }
+  let value = await getStorageValue<Partial<AppSettings>>(SETTINGS_KEY)
+  if (!value || typeof value !== "object") {
+    for (const key of LEGACY_SETTINGS_KEYS) {
+      value = await getStorageValue<Partial<AppSettings>>(key)
+      if (value && typeof value === "object") break
     }
-    if (value && typeof value === "object") {
-      return {
-        ...DEFAULT_SETTINGS,
-        ...value,
-        defaultCurrency: CURRENCIES.includes(String(value.defaultCurrency)) ? String(value.defaultCurrency) : DEFAULT_SETTINGS.defaultCurrency,
-        defaultReminderDays: REMINDER_OPTIONS.includes(Number(value.defaultReminderDays)) ? Number(value.defaultReminderDays) : DEFAULT_SETTINGS.defaultReminderDays,
-        notificationsEnabled: value.notificationsEnabled !== false,
-      }
+  }
+  if (value && typeof value === "object") {
+    return {
+      ...DEFAULT_SETTINGS,
+      ...value,
+      defaultCurrency: CURRENCIES.includes(String(value.defaultCurrency))
+        ? String(value.defaultCurrency) : DEFAULT_SETTINGS.defaultCurrency,
+      defaultReminderDays: REMINDER_OPTIONS.includes(Number(value.defaultReminderDays))
+        ? Number(value.defaultReminderDays) : DEFAULT_SETTINGS.defaultReminderDays,
+      notificationsEnabled: value.notificationsEnabled !== false,
     }
-  } catch (error) {
-    console.error("读取设置失败", error)
   }
   return { ...DEFAULT_SETTINGS }
 }
 
 export async function saveSettings(settings: AppSettings): Promise<void> {
-  await Storage.set(SETTINGS_KEY, settings, { shared: false })
-  await Storage.set(SETTINGS_KEY, settings, { shared: true })
+  let privateError: unknown = null
+  try {
+    await Storage.set(SETTINGS_KEY, settings, { shared: false })
+  } catch (error) {
+    privateError = error
+  }
+  try {
+    await Storage.set(SETTINGS_KEY, settings, { shared: true })
+  } catch (error) {
+    console.error("共享设置存储失败", error)
+  }
+  if (privateError) throw privateError
 }
 
 export function cycleLabel(cycle: BillingCycle): string {
@@ -309,7 +337,6 @@ function previousBillingDate(timestamp: number, cycle: BillingCycle): number {
   return dateOnly(date.getTime())
 }
 
-/** 剩余周期占比：刚开始时接近 1，临近到期时接近 0。 */
 export function remainingProgress(item: Subscription): number {
   const end = effectiveDueDate(item)
   let start = item.startDate
