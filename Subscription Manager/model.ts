@@ -14,11 +14,7 @@ export type Subscription = {
   autoRenew: boolean
   reminderDays: number
   notes: string
-  appStoreURL: string
   icon: string
-  iconPath?: string
-  iconURL?: string
-  color: string
   progressColor: string
   active: boolean
 }
@@ -34,18 +30,17 @@ export type CatalogItem = {
   category: string
   icon: string
   color: string
-  currency?: string
-  price?: number
-  cycle?: BillingCycle
 }
 
 export const CATEGORIES = ["娱乐", "效率", "教育", "云服务", "健身", "阅读", "其他"]
 export const CURRENCIES = ["CNY", "USD", "HKD", "TWD", "JPY", "EUR", "GBP"]
 export const REMINDER_OPTIONS = [0, 1, 3, 7, 14]
-export const ICON_OPTIONS = [
+export const SYMBOL_PRESETS = [
   "creditcard.fill", "music.note", "play.rectangle.fill", "cloud.fill",
   "gamecontroller.fill", "book.fill", "figure.run", "sparkles",
-  "tv.fill", "cart.fill", "graduationcap.fill", "ellipsis.circle.fill",
+  "tv.fill", "cart.fill", "graduationcap.fill", "briefcase.fill",
+  "newspaper.fill", "film.fill", "headphones", "photo.fill",
+  "shippingbox.fill", "network", "globe", "ellipsis.circle.fill",
 ]
 
 export const POPULAR_SERVICES: CatalogItem[] = [
@@ -53,16 +48,15 @@ export const POPULAR_SERVICES: CatalogItem[] = [
   { name: "Spotify", category: "娱乐", icon: "music.note", color: "systemGreen" },
   { name: "Apple Music", category: "娱乐", icon: "music.note", color: "systemPink" },
   { name: "YouTube Premium", category: "娱乐", icon: "play.rectangle.fill", color: "systemRed" },
-  { name: "Disney+", category: "娱乐", icon: "play.rectangle.fill", color: "systemBlue" },
+  { name: "Disney+", category: "娱乐", icon: "film.fill", color: "systemBlue" },
   { name: "HBO Max", category: "娱乐", icon: "tv.fill", color: "systemPurple" },
   { name: "Xbox Game Pass", category: "娱乐", icon: "gamecontroller.fill", color: "systemGreen" },
   { name: "iCloud+", category: "云服务", icon: "cloud.fill", color: "systemBlue" },
   { name: "Google One", category: "云服务", icon: "cloud.fill", color: "systemBlue" },
-  { name: "Dropbox", category: "云服务", icon: "cloud.fill", color: "systemBlue" },
+  { name: "Dropbox", category: "云服务", icon: "shippingbox.fill", color: "systemBlue" },
   { name: "ChatGPT Plus", category: "效率", icon: "sparkles", color: "systemGreen" },
   { name: "Microsoft 365", category: "效率", icon: "briefcase.fill", color: "systemBlue" },
   { name: "Notion", category: "效率", icon: "square.on.square", color: "systemGray" },
-  { name: "Linear", category: "效率", icon: "checkmark.circle.fill", color: "systemPurple" },
   { name: "GitHub Copilot", category: "效率", icon: "chevron.left.forwardslash.chevron.right", color: "systemGray" },
   { name: "Adobe Creative Cloud", category: "效率", icon: "paintpalette.fill", color: "systemRed" },
   { name: "Kindle Unlimited", category: "阅读", icon: "book.fill", color: "systemOrange" },
@@ -76,67 +70,84 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notificationsEnabled: true,
 }
 
-const DAY = 24 * 60 * 60 * 1000
-const DATA_DIR = `${FileManager.appGroupDocumentsDirectory}/subscription_manager`
+const DAY = 86_400_000
+const DATA_DIR = `${FileManager.appGroupDocumentsDirectory}/subscription_manager_v2`
 const SUBSCRIPTIONS_PATH = `${DATA_DIR}/subscriptions.json`
 const SETTINGS_PATH = `${DATA_DIR}/settings.json`
-const LEGACY_STORAGE_KEYS = [
-  "subscription_manager_subscriptions_v4",
-  "subscription_manager_subscriptions_v3",
-  "subscription_manager_subscriptions_v2",
-  "subscription_manager_subscriptions_v1",
-]
+
+export function dateOnly(timestamp: number): number {
+  const date = new Date(timestamp)
+  date.setHours(12, 0, 0, 0)
+  return date.getTime()
+}
 
 export function makeID(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-export function dateOnly(timestamp: number): number {
-  const date = new Date(timestamp)
-  date.setHours(9, 0, 0, 0)
-  return date.getTime()
-}
-
-export function createSubscription(settings: AppSettings = DEFAULT_SETTINGS, catalog?: CatalogItem): Subscription {
+export function createSubscription(
+  settings: AppSettings = DEFAULT_SETTINGS,
+  catalog?: CatalogItem,
+): Subscription {
   const today = dateOnly(Date.now())
   return {
-    id: makeID(), name: catalog?.name ?? "", price: catalog?.price ?? 0,
-    currency: catalog?.currency ?? settings.defaultCurrency,
-    cycle: catalog?.cycle ?? "monthly", category: catalog?.category ?? "其他",
-    startDate: today, nextBillingDate: today, trialEndDate: null, endDate: null,
-    autoRenew: catalog?.cycle !== "oneTime", reminderDays: settings.defaultReminderDays,
-    notes: "", appStoreURL: "", icon: catalog?.icon ?? "creditcard.fill",
-    iconPath: "", iconURL: "", color: catalog?.color ?? "systemBlue",
-    progressColor: "systemBlue", active: true,
+    id: makeID(),
+    name: catalog?.name ?? "",
+    price: 0,
+    currency: settings.defaultCurrency,
+    cycle: "monthly",
+    category: catalog?.category ?? "其他",
+    startDate: today,
+    nextBillingDate: today,
+    trialEndDate: null,
+    endDate: null,
+    autoRenew: true,
+    reminderDays: settings.defaultReminderDays,
+    notes: "",
+    icon: catalog?.icon ?? "creditcard.fill",
+    progressColor: catalog?.color ?? "systemBlue",
+    active: true,
   }
 }
 
-function normalize(item: Partial<Subscription>): Subscription {
+function normalize(raw: Partial<Subscription> & Record<string, any>): Subscription {
   const base = createSubscription()
-  const cycle = String(item.cycle)
+  const cycle = String(raw.cycle)
+  const icon = typeof raw.icon === "string" && !raw.icon.startsWith("remote:") && !raw.icon.startsWith("local:") && !raw.icon.startsWith("custom:")
+    ? raw.icon
+    : "creditcard.fill"
   return {
-    ...base, ...item,
-    id: typeof item.id === "string" && item.id ? item.id : makeID(),
-    name: String(item.name || ""),
-    price: Number.isFinite(Number(item.price)) ? Math.max(0, Number(item.price)) : 0,
-    currency: CURRENCIES.includes(String(item.currency)) ? String(item.currency) : base.currency,
-    cycle: ["weekly", "monthly", "quarterly", "yearly", "oneTime"].includes(cycle) ? cycle as BillingCycle : "monthly",
-    category: CATEGORIES.includes(String(item.category)) ? String(item.category) : "其他",
-    startDate: Number(item.startDate) || base.startDate,
-    nextBillingDate: Number(item.nextBillingDate) || base.nextBillingDate,
-    trialEndDate: item.trialEndDate ? Number(item.trialEndDate) : null,
-    endDate: item.endDate ? Number(item.endDate) : null,
-    reminderDays: REMINDER_OPTIONS.includes(Number(item.reminderDays)) ? Number(item.reminderDays) : base.reminderDays,
-    iconPath: typeof item.iconPath === "string" ? item.iconPath : "",
-    iconURL: typeof item.iconURL === "string" ? item.iconURL : "",
-    progressColor: typeof item.progressColor === "string" && item.progressColor ? item.progressColor : (typeof item.color === "string" && item.color ? item.color : "systemBlue"),
-    autoRenew: item.autoRenew !== false,
-    active: item.active !== false,
+    ...base,
+    ...raw,
+    id: typeof raw.id === "string" && raw.id ? raw.id : makeID(),
+    name: String(raw.name || ""),
+    price: Number.isFinite(Number(raw.price)) ? Math.max(0, Number(raw.price)) : 0,
+    currency: CURRENCIES.includes(String(raw.currency)) ? String(raw.currency) : base.currency,
+    cycle: ["weekly", "monthly", "quarterly", "yearly", "oneTime"].includes(cycle)
+      ? cycle as BillingCycle
+      : "monthly",
+    category: CATEGORIES.includes(String(raw.category)) ? String(raw.category) : "其他",
+    startDate: Number(raw.startDate) || base.startDate,
+    nextBillingDate: Number(raw.nextBillingDate) || base.nextBillingDate,
+    trialEndDate: raw.trialEndDate ? Number(raw.trialEndDate) : null,
+    endDate: raw.endDate ? Number(raw.endDate) : null,
+    reminderDays: REMINDER_OPTIONS.includes(Number(raw.reminderDays))
+      ? Number(raw.reminderDays)
+      : base.reminderDays,
+    notes: String(raw.notes || ""),
+    icon,
+    progressColor: typeof raw.progressColor === "string" && raw.progressColor
+      ? raw.progressColor
+      : (typeof raw.color === "string" && raw.color ? raw.color : "systemBlue"),
+    autoRenew: raw.autoRenew !== false,
+    active: raw.active !== false,
   }
 }
 
 function ensureDirectory(): void {
-  if (!FileManager.existsSync(DATA_DIR)) FileManager.createDirectorySync(DATA_DIR, true)
+  if (!FileManager.existsSync(DATA_DIR)) {
+    FileManager.createDirectorySync(DATA_DIR, true)
+  }
 }
 
 function readJSON<T>(path: string): T | null {
@@ -144,52 +155,40 @@ function readJSON<T>(path: string): T | null {
     if (!FileManager.existsSync(path)) return null
     return JSON.parse(FileManager.readAsStringSync(path)) as T
   } catch (error) {
-    console.error("读取订阅数据文件失败", error)
+    console.error("读取订阅文件失败", error)
     return null
   }
 }
 
 function writeJSON(path: string, value: unknown): void {
   ensureDirectory()
-  FileManager.writeAsStringSync(path, JSON.stringify(value))
+  FileManager.writeAsStringSync(path, JSON.stringify(value, null, 2))
 }
 
-export async function loadSubscriptions(): Promise<Subscription[]> {
-  let value = readJSON<Partial<Subscription>[]>(SUBSCRIPTIONS_PATH)
-  if (!Array.isArray(value)) {
-    for (const key of LEGACY_STORAGE_KEYS) {
-      try {
-        value = await Storage.get<Partial<Subscription>[]>(key)
-        if (Array.isArray(value)) break
-      } catch { /* 继续尝试旧键 */ }
-    }
-  }
-  return Array.isArray(value) ? value.map(normalize) : []
+export function loadSubscriptions(): Subscription[] {
+  const data = readJSON<Array<Partial<Subscription> & Record<string, any>>>(SUBSCRIPTIONS_PATH)
+  return Array.isArray(data) ? data.map(normalize) : []
 }
 
-export async function saveSubscriptions(items: Subscription[]): Promise<void> {
-  writeJSON(SUBSCRIPTIONS_PATH, items.map(normalize))
+export function saveSubscriptions(items: Subscription[]): void {
+  writeJSON(SUBSCRIPTIONS_PATH, items.map(item => normalize(item)))
 }
 
-export async function loadSettings(): Promise<AppSettings> {
-  const local = readJSON<Partial<AppSettings>>(SETTINGS_PATH)
-  if (local && typeof local === "object") return normalizeSettings(local)
-  try {
-    const value = await Storage.get<Partial<AppSettings>>("subscription_manager_settings_v1")
-    if (value && typeof value === "object") return normalizeSettings(value)
-  } catch { /* 使用默认值 */ }
-  return { ...DEFAULT_SETTINGS }
-}
-
-function normalizeSettings(value: Partial<AppSettings>): AppSettings {
+export function loadSettings(): AppSettings {
+  const data = readJSON<Partial<AppSettings>>(SETTINGS_PATH)
+  if (!data) return { ...DEFAULT_SETTINGS }
   return {
-    defaultCurrency: CURRENCIES.includes(String(value.defaultCurrency)) ? String(value.defaultCurrency) : DEFAULT_SETTINGS.defaultCurrency,
-    defaultReminderDays: REMINDER_OPTIONS.includes(Number(value.defaultReminderDays)) ? Number(value.defaultReminderDays) : DEFAULT_SETTINGS.defaultReminderDays,
-    notificationsEnabled: value.notificationsEnabled !== false,
+    defaultCurrency: CURRENCIES.includes(String(data.defaultCurrency))
+      ? String(data.defaultCurrency)
+      : DEFAULT_SETTINGS.defaultCurrency,
+    defaultReminderDays: REMINDER_OPTIONS.includes(Number(data.defaultReminderDays))
+      ? Number(data.defaultReminderDays)
+      : DEFAULT_SETTINGS.defaultReminderDays,
+    notificationsEnabled: data.notificationsEnabled !== false,
   }
 }
 
-export async function saveSettings(settings: AppSettings): Promise<void> {
+export function saveSettings(settings: AppSettings): void {
   writeJSON(SETTINGS_PATH, settings)
 }
 
@@ -218,42 +217,56 @@ export function activeItems(items: Subscription[]): Subscription[] {
   return items.filter(item => item.active && (!item.endDate || item.endDate >= now))
 }
 
-export function monthlyEquivalent(item: Subscription): number {
-  return item.active ? item.price * cycleMultiplier(item.cycle) / 12 : 0
-}
-
-export function annualEquivalent(item: Subscription): number {
-  return item.active ? item.price * cycleMultiplier(item.cycle) : 0
-}
-
 export function monthlyCost(items: Subscription[]): number {
-  return activeItems(items).reduce((sum, item) => sum + monthlyEquivalent(item), 0)
+  return activeItems(items).reduce((sum, item) => {
+    return sum + item.price * cycleMultiplier(item.cycle) / 12
+  }, 0)
 }
 
-export function costByCurrency(items: Subscription[], annual = false): Record<string, number> {
+export function costByCurrency(
+  items: Subscription[],
+  annual = false,
+): Record<string, number> {
   const result: Record<string, number> = {}
   for (const item of activeItems(items)) {
-    const amount = annual ? annualEquivalent(item) : monthlyEquivalent(item)
-    result[item.currency] = (result[item.currency] || 0) + amount
+    const value = annual
+      ? item.price * cycleMultiplier(item.cycle)
+      : item.price * cycleMultiplier(item.cycle) / 12
+    result[item.currency] = (result[item.currency] || 0) + value
   }
   return result
 }
 
 export function formatMoney(amount: number, currency: string): string {
-  const value = Number.isFinite(amount) ? amount : 0
-  try { return new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: 2 }).format(value) }
-  catch { return `${currency} ${value.toFixed(2)}` }
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+    }).format(Number.isFinite(amount) ? amount : 0)
+  } catch {
+    return `${currency} ${(Number.isFinite(amount) ? amount : 0).toFixed(2)}`
+  }
 }
 
-export function formatCostSummary(items: Subscription[], annual = false): string {
+export function formatCostSummary(
+  items: Subscription[],
+  annual = false,
+): string {
   const entries = Object.entries(costByCurrency(items, annual))
   if (entries.length === 0) return formatMoney(0, "CNY")
-  return entries.map(([currency, amount]) => formatMoney(amount, currency)).join("  ·  ")
+  return entries
+    .map(([currency, amount]) => formatMoney(amount, currency))
+    .join("  ·  ")
 }
 
 export function formatDate(timestamp: number | null): string {
   if (!timestamp) return "未设置"
-  return new Intl.DateTimeFormat(undefined, { year: "numeric", month: "numeric", day: "numeric" }).format(new Date(timestamp))
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).format(new Date(timestamp))
 }
 
 export function daysUntil(timestamp: number): number {
@@ -262,7 +275,9 @@ export function daysUntil(timestamp: number): number {
 
 export function effectiveDueDate(item: Subscription): number {
   const dates = [item.nextBillingDate]
-  if (item.trialEndDate && daysUntil(item.trialEndDate) >= 0) dates.push(item.trialEndDate)
+  if (item.trialEndDate && daysUntil(item.trialEndDate) >= 0) {
+    dates.push(item.trialEndDate)
+  }
   if (item.endDate) dates.push(item.endDate)
   return Math.min(...dates.filter(value => Number.isFinite(value) && value > 0))
 }
@@ -271,7 +286,10 @@ export function remainingDays(item: Subscription): number {
   return Math.max(0, daysUntil(effectiveDueDate(item)))
 }
 
-function previousBillingDate(timestamp: number, cycle: BillingCycle): number {
+function previousBillingDate(
+  timestamp: number,
+  cycle: BillingCycle,
+): number {
   const date = new Date(timestamp)
   switch (cycle) {
     case "weekly": date.setDate(date.getDate() - 7); break
@@ -285,17 +303,24 @@ function previousBillingDate(timestamp: number, cycle: BillingCycle): number {
 
 export function remainingProgress(item: Subscription): number {
   const end = effectiveDueDate(item)
-  const start = item.cycle === "oneTime" ? item.startDate : Math.max(item.startDate, previousBillingDate(end, item.cycle))
+  const start = item.cycle === "oneTime"
+    ? item.startDate
+    : Math.max(item.startDate, previousBillingDate(end, item.cycle))
   const total = Math.max(DAY, end - start)
   const remaining = Math.max(0, end - dateOnly(Date.now()))
   return Math.max(0, Math.min(1, remaining / total))
 }
 
-export function sortByNextBilling(items: Subscription[]): Subscription[] {
+export function sortByNextBilling(
+  items: Subscription[],
+): Subscription[] {
   return [...items].sort((a, b) => effectiveDueDate(a) - effectiveDueDate(b))
 }
 
-export function advanceBillingDate(timestamp: number, cycle: BillingCycle): number {
+export function advanceBillingDate(
+  timestamp: number,
+  cycle: BillingCycle,
+): number {
   const date = new Date(timestamp)
   switch (cycle) {
     case "weekly": date.setDate(date.getDate() + 7); break
