@@ -1,19 +1,22 @@
 # Subscription Manager
 
-订阅管理 Scripting 项目：记录订阅费用、续费日期、试用期、提醒和分类统计，并提供桌面小组件。
+使用 SF Symbols 的 Scripting 订阅管理项目。
 
 ## 功能
 
-- 常用服务和自定义订阅录入
+- 新增、编辑、删除订阅
 - 周 / 月 / 季 / 年 / 一次性周期
-- 试用结束、自动续费和结束日期
-- 本月与年度费用估算
-- 分类统计与环形图
-- 本地续费提醒
-- 桌面 Widget
+- 试用期、自动续费、结束日期与续费提醒
+- 月度与年度费用统计
+- SF Symbols 预设及自定义 Symbol 名称
+- Widget 仅显示 SF Symbol、剩余天数和可自定义颜色进度条
+- 所有子页面提供返回与关闭操作
 
-## 安装
+## 数据
 
-在 Scripting 中使用“从 GitHub 安装”，并选择本目录；也可以通过仓库目录 URL 导入。
+数据存储于 Scripting App Group：
 
-> 数据默认保存在当前 Scripting 脚本的本地存储中。
+```text
+subscription_manager_v2/subscriptions.json
+subscription_manager_v2/settings.json
+```
