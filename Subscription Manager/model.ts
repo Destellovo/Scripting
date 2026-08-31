@@ -76,21 +76,16 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notificationsEnabled: true,
 }
 
-const SUBSCRIPTIONS_KEY = "subscription_manager_subscriptions_v5"
-const LEGACY_SUBSCRIPTIONS_KEYS = [
+const DAY = 24 * 60 * 60 * 1000
+const DATA_DIR = `${FileManager.appGroupDocumentsDirectory}/subscription_manager`
+const SUBSCRIPTIONS_PATH = `${DATA_DIR}/subscriptions.json`
+const SETTINGS_PATH = `${DATA_DIR}/settings.json`
+const LEGACY_STORAGE_KEYS = [
   "subscription_manager_subscriptions_v4",
   "subscription_manager_subscriptions_v3",
   "subscription_manager_subscriptions_v2",
   "subscription_manager_subscriptions_v1",
 ]
-const SETTINGS_KEY = "subscription_manager_settings_v5"
-const LEGACY_SETTINGS_KEYS = [
-  "subscription_manager_settings_v4",
-  "subscription_manager_settings_v3",
-  "subscription_manager_settings_v2",
-  "subscription_manager_settings_v1",
-]
-const DAY = 24 * 60 * 60 * 1000
 
 export function makeID(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -105,118 +100,97 @@ export function dateOnly(timestamp: number): number {
 export function createSubscription(settings: AppSettings = DEFAULT_SETTINGS, catalog?: CatalogItem): Subscription {
   const today = dateOnly(Date.now())
   return {
-    id: makeID(),
-    name: catalog?.name ?? "",
-    price: catalog?.price ?? 0,
+    id: makeID(), name: catalog?.name ?? "", price: catalog?.price ?? 0,
     currency: catalog?.currency ?? settings.defaultCurrency,
-    cycle: catalog?.cycle ?? "monthly",
-    category: catalog?.category ?? "其他",
-    startDate: today,
-    nextBillingDate: today,
-    trialEndDate: null,
-    endDate: null,
-    autoRenew: catalog?.cycle !== "oneTime",
-    reminderDays: settings.defaultReminderDays,
-    notes: "",
-    appStoreURL: "",
-    icon: catalog?.icon ?? "creditcard.fill",
-    iconPath: "",
-    iconURL: "",
-    color: catalog?.color ?? "systemBlue",
-    progressColor: "systemBlue",
-    active: true,
+    cycle: catalog?.cycle ?? "monthly", category: catalog?.category ?? "其他",
+    startDate: today, nextBillingDate: today, trialEndDate: null, endDate: null,
+    autoRenew: catalog?.cycle !== "oneTime", reminderDays: settings.defaultReminderDays,
+    notes: "", appStoreURL: "", icon: catalog?.icon ?? "creditcard.fill",
+    iconPath: "", iconURL: "", color: catalog?.color ?? "systemBlue",
+    progressColor: "systemBlue", active: true,
   }
 }
 
 function normalize(item: Partial<Subscription>): Subscription {
   const base = createSubscription()
   const cycle = String(item.cycle)
-  const currency = String(item.currency)
-  const category = String(item.category)
   return {
-    ...base,
-    ...item,
+    ...base, ...item,
     id: typeof item.id === "string" && item.id ? item.id : makeID(),
     name: String(item.name || ""),
     price: Number.isFinite(Number(item.price)) ? Math.max(0, Number(item.price)) : 0,
-    currency: CURRENCIES.includes(currency) ? currency : base.currency,
-    cycle: ["weekly", "monthly", "quarterly", "yearly", "oneTime"].includes(cycle)
-      ? cycle as BillingCycle : "monthly",
-    category: CATEGORIES.includes(category) ? category : "其他",
+    currency: CURRENCIES.includes(String(item.currency)) ? String(item.currency) : base.currency,
+    cycle: ["weekly", "monthly", "quarterly", "yearly", "oneTime"].includes(cycle) ? cycle as BillingCycle : "monthly",
+    category: CATEGORIES.includes(String(item.category)) ? String(item.category) : "其他",
     startDate: Number(item.startDate) || base.startDate,
     nextBillingDate: Number(item.nextBillingDate) || base.nextBillingDate,
     trialEndDate: item.trialEndDate ? Number(item.trialEndDate) : null,
     endDate: item.endDate ? Number(item.endDate) : null,
-    reminderDays: REMINDER_OPTIONS.includes(Number(item.reminderDays))
-      ? Number(item.reminderDays) : base.reminderDays,
+    reminderDays: REMINDER_OPTIONS.includes(Number(item.reminderDays)) ? Number(item.reminderDays) : base.reminderDays,
     iconPath: typeof item.iconPath === "string" ? item.iconPath : "",
     iconURL: typeof item.iconURL === "string" ? item.iconURL : "",
-    progressColor: typeof item.progressColor === "string" && item.progressColor
-      ? item.progressColor
-      : (typeof item.color === "string" && item.color ? item.color : "systemBlue"),
+    progressColor: typeof item.progressColor === "string" && item.progressColor ? item.progressColor : (typeof item.color === "string" && item.color ? item.color : "systemBlue"),
     autoRenew: item.autoRenew !== false,
     active: item.active !== false,
   }
 }
 
-async function readStorage<T>(key: string): Promise<T | null> {
+function ensureDirectory(): void {
+  if (!FileManager.existsSync(DATA_DIR)) FileManager.createDirectorySync(DATA_DIR, true)
+}
+
+function readJSON<T>(path: string): T | null {
   try {
-    const value = await Storage.get<T>(key, { shared: false })
-    if (value != null) return value
-  } catch { /* 尝试共享存储 */ }
-  try {
-    const value = await Storage.get<T>(key, { shared: true })
-    return value ?? null
-  } catch {
+    if (!FileManager.existsSync(path)) return null
+    return JSON.parse(FileManager.readAsStringSync(path)) as T
+  } catch (error) {
+    console.error("读取订阅数据文件失败", error)
     return null
   }
 }
 
-async function writeStorage<T>(key: string, value: T): Promise<void> {
-  const result = await Storage.set(key, value, { shared: false })
-  if (result === false) throw new Error("本地存储被拒绝")
-  try {
-    await Storage.set(key, value, { shared: true })
-  } catch { /* Widget 仍可用私有存储或文件回退 */ }
+function writeJSON(path: string, value: unknown): void {
+  ensureDirectory()
+  FileManager.writeAsStringSync(path, JSON.stringify(value))
 }
 
 export async function loadSubscriptions(): Promise<Subscription[]> {
-  let value = await readStorage<Partial<Subscription>[]>(SUBSCRIPTIONS_KEY)
+  let value = readJSON<Partial<Subscription>[]>(SUBSCRIPTIONS_PATH)
   if (!Array.isArray(value)) {
-    for (const key of LEGACY_SUBSCRIPTIONS_KEYS) {
-      value = await readStorage<Partial<Subscription>[]>(key)
-      if (Array.isArray(value)) break
+    for (const key of LEGACY_STORAGE_KEYS) {
+      try {
+        value = await Storage.get<Partial<Subscription>[]>(key)
+        if (Array.isArray(value)) break
+      } catch { /* 继续尝试旧键 */ }
     }
   }
   return Array.isArray(value) ? value.map(normalize) : []
 }
 
 export async function saveSubscriptions(items: Subscription[]): Promise<void> {
-  await writeStorage(SUBSCRIPTIONS_KEY, items.map(normalize))
+  writeJSON(SUBSCRIPTIONS_PATH, items.map(normalize))
 }
 
 export async function loadSettings(): Promise<AppSettings> {
-  let value = await readStorage<Partial<AppSettings>>(SETTINGS_KEY)
-  if (!value || typeof value !== "object") {
-    for (const key of LEGACY_SETTINGS_KEYS) {
-      value = await readStorage<Partial<AppSettings>>(key)
-      if (value && typeof value === "object") break
-    }
-  }
-  if (value && typeof value === "object") {
-    return {
-      ...DEFAULT_SETTINGS,
-      ...value,
-      defaultCurrency: CURRENCIES.includes(String(value.defaultCurrency)) ? String(value.defaultCurrency) : DEFAULT_SETTINGS.defaultCurrency,
-      defaultReminderDays: REMINDER_OPTIONS.includes(Number(value.defaultReminderDays)) ? Number(value.defaultReminderDays) : DEFAULT_SETTINGS.defaultReminderDays,
-      notificationsEnabled: value.notificationsEnabled !== false,
-    }
-  }
+  const local = readJSON<Partial<AppSettings>>(SETTINGS_PATH)
+  if (local && typeof local === "object") return normalizeSettings(local)
+  try {
+    const value = await Storage.get<Partial<AppSettings>>("subscription_manager_settings_v1")
+    if (value && typeof value === "object") return normalizeSettings(value)
+  } catch { /* 使用默认值 */ }
   return { ...DEFAULT_SETTINGS }
 }
 
+function normalizeSettings(value: Partial<AppSettings>): AppSettings {
+  return {
+    defaultCurrency: CURRENCIES.includes(String(value.defaultCurrency)) ? String(value.defaultCurrency) : DEFAULT_SETTINGS.defaultCurrency,
+    defaultReminderDays: REMINDER_OPTIONS.includes(Number(value.defaultReminderDays)) ? Number(value.defaultReminderDays) : DEFAULT_SETTINGS.defaultReminderDays,
+    notificationsEnabled: value.notificationsEnabled !== false,
+  }
+}
+
 export async function saveSettings(settings: AppSettings): Promise<void> {
-  await writeStorage(SETTINGS_KEY, settings)
+  writeJSON(SETTINGS_PATH, settings)
 }
 
 export function cycleLabel(cycle: BillingCycle): string {
@@ -267,11 +241,8 @@ export function costByCurrency(items: Subscription[], annual = false): Record<st
 
 export function formatMoney(amount: number, currency: string): string {
   const value = Number.isFinite(amount) ? amount : 0
-  try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: 2 }).format(value)
-  } catch {
-    return `${currency} ${value.toFixed(2)}`
-  }
+  try { return new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: 2 }).format(value) }
+  catch { return `${currency} ${value.toFixed(2)}` }
 }
 
 export function formatCostSummary(items: Subscription[], annual = false): string {
@@ -290,10 +261,10 @@ export function daysUntil(timestamp: number): number {
 }
 
 export function effectiveDueDate(item: Subscription): number {
-  const candidates = [item.nextBillingDate]
-  if (item.trialEndDate && daysUntil(item.trialEndDate) >= 0) candidates.push(item.trialEndDate)
-  if (item.endDate) candidates.push(item.endDate)
-  return Math.min(...candidates.filter(value => Number.isFinite(value) && value > 0))
+  const dates = [item.nextBillingDate]
+  if (item.trialEndDate && daysUntil(item.trialEndDate) >= 0) dates.push(item.trialEndDate)
+  if (item.endDate) dates.push(item.endDate)
+  return Math.min(...dates.filter(value => Number.isFinite(value) && value > 0))
 }
 
 export function remainingDays(item: Subscription): number {
