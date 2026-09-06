@@ -22,10 +22,7 @@
     "homepage" : "https:\/\/github.com\/OkadaMei\/Scripting"
   },
   "description" : "GiriGiri 动漫浏览器：支持分类搜索、双来源新番时间表、系统播放、逐集离线、收藏、历史与续播，并提供 Bangumi OAuth、完整条目资料、系统翻译和进度同步。",
-  "remoteResource" : {
-    "url" : "https:\/\/cdn.jsdelivr.net\/gh\/Destellovo\/Scripting@main\/girigirilove%20Glass%20C.scripting",
-    "autoUpdateInterval" : 600
-  },
+  "remoteResource" : null,
   "localizedNames" : {
     "ru" : "",
     "zh" : "GiriGiri Glass",
