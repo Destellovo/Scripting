@@ -1,14 +1,41 @@
 {
-  "localizedNames": null,
-  "localizedDescriptions": null,
-  "intentInputTypes": [],
-  "author": null,
-  "contributors": [],
-  "name": "订阅管理",
-  "color": "rgba(55, 125, 255, 1)",
   "runInApp": true,
-  "icon": "calendar.badge.clock",
+  "name": "Subscription Manager",
+  "color": "rgba(55, 125, 255, 1.00)",
+  "intentInputTypes": [],
+  "localizedDescriptions": {
+    "pt": "",
+    "de": "",
+    "es": "",
+    "it": "",
+    "ja": "",
+    "fr": "",
+    "ru": "",
+    "zh": "SF Symbols 订阅管理、到期提醒与进度 Widget，支持多币种支出统计和人民币换算。",
+    "en": "Subscription manager with renewal reminders, spending statistics, widgets, multi-currency support and CNY conversion."
+  },
+  "author": {
+    "name": "Destellovo",
+    "email": "destellovo@users.noreply.github.com",
+    "homepage": "https://github.com/Destellovo/Scripting"
+  },
+  "description": "SF Symbols 订阅管理、到期提醒与进度 Widget",
   "remoteResource": null,
-  "version": "1.1.1",
-  "description": "SF Symbols 订阅管理、到期提醒与进度 Widget"
+  "localizedNames": {
+    "ru": "",
+    "zh": "订阅管理",
+    "fr": "",
+    "ja": "",
+    "en": "Subscription Manager",
+    "de": "",
+    "it": "",
+    "es": "",
+    "pt": ""
+  },
+  "icon": "calendar.badge.clock",
+  "permissions": null,
+  "iconImage": "",
+  "entry": "index.tsx",
+  "contributors": [],
+  "version": "1.1.1"
 }
