@@ -28,6 +28,19 @@ type ChangelogRelease = {
 
 export const CHANGELOG_RELEASES: ReadonlyArray<ChangelogRelease> = [
   {
+    version: "5.1.7",
+    date: "2026年9月6日",
+    headline: "恢复 Bangumi 按钮 Glass 背景",
+    summary: "在保持单次点击可靠响应的同时，恢复配置区和授权入口按钮的原版 Glass 视觉背景。",
+    items: [
+      {
+        icon: "square.3.layers.3d",
+        title: "分离视觉层与点击层",
+        detail: "由非交互 GlassSurface 提供背景，内层原生 Button 独立处理点击，避免背景手势再次阻断操作。",
+      },
+    ],
+  },
+  {
     version: "5.1.6",
     date: "2026年9月6日",
     headline: "恢复退出按钮与 Bangumi 配置交互",
