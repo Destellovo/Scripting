@@ -65,14 +65,12 @@ export function HomePage() {
   )
 
   return (
-    <NavigationStack>
-      <TabView
-        selection={selection as any}
-        tint="systemPink"
-        tabViewStyle="sidebarAdaptable"
-        tabBarMinimizeBehavior="onScrollDown"
-        toolbar={chromeToolbar}
-      >
+    <TabView
+      selection={selection as any}
+      tint="systemPink"
+      tabViewStyle="sidebarAdaptable"
+      toolbar={chromeToolbar}
+    >
         <Tab title="浏览" systemImage="house.fill" value={"discover" as AppTab}>
           <NavigationStack>
             <ZStack>
@@ -118,6 +116,5 @@ export function HomePage() {
           </NavigationStack>
         </Tab>
       </TabView>
-    </NavigationStack>
   )
 }

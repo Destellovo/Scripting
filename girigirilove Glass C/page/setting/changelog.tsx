@@ -28,6 +28,29 @@ type ChangelogRelease = {
 
 export const CHANGELOG_RELEASES: ReadonlyArray<ChangelogRelease> = [
   {
+    version: "5.1.4",
+    date: "2026年9月6日",
+    headline: "修复按钮首次点击不响应",
+    summary: "调整导航、滚动和 Glass 点击层级，解决按钮需要先下拉页面或重复点击才执行的问题。",
+    items: [
+      {
+        icon: "hand.tap.fill",
+        title: "恢复单次点击响应",
+        detail: "移除与页面滚动竞争的标签栏自动收起手势，并避免重复 NavigationStack 叠加导航事件层。",
+      },
+      {
+        icon: "rectangle.and.hand.point.up.left.fill",
+        title: "统一按钮命中区域",
+        detail: "整行按钮和导航入口使用至少 44 点高度及明确 contentShape，空白区域也能可靠响应。",
+      },
+      {
+        icon: "circle.hexagongrid.fill",
+        title: "分离 Glass 动画与点击识别",
+        detail: "关闭附加在 Button 和 Menu 上的第二层交互式 Glass 手势，由原生控件单独处理点击，保留原有视觉样式。",
+      },
+    ],
+  },
+  {
     version: "5.1.3",
     date: "2026年9月6日",
     headline: "授权、数据一致性与容错修复",

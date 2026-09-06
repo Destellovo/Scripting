@@ -436,7 +436,7 @@ const glassFilterMenuStyleProps = {
   menuStyle: "button" as const,
   buttonStyle: "plain" as const,
   glassEffect: {
-    glass: UIGlass.clear().interactive(true),
+    glass: UIGlass.clear().interactive(false),
     shape: { type: "rect" as const, cornerRadius: 16, style: "continuous" as const },
   },
   glassEffectTransition: "materialize" as const,

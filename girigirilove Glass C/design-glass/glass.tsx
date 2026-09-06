@@ -80,10 +80,12 @@ export function GlassSurface(props: {
 }
 
 export const glassListRowStyleProps = {
-  frame: { maxWidth: "infinity" as const, alignment: "leading" as const },
+  frame: { maxWidth: "infinity" as const, minHeight: 44, alignment: "leading" as const },
   padding: { horizontal: 12, vertical: 10 },
+  contentShape: { type: "rect" as const, cornerRadius: 16, style: "continuous" as const },
+  buttonStyle: "plain" as const,
   glassEffect: {
-    glass: UIGlass.clear().interactive(true),
+    glass: UIGlass.clear().interactive(false),
     shape: { type: "rect" as const, cornerRadius: 16, style: "continuous" as const },
   },
   listRowBackground: <></>,
