@@ -4,7 +4,7 @@ const BANGUMI_API = "https://api.bgm.tv"
 const BANGUMI_PRIVATE_API = "https://next.bgm.tv"
 const BANGUMI_AUTH_DOMAIN = "next.bgm.tv"
 const BANGUMI_AUTH_DOMAIN_KEY = "bangumi.authDomain"
-const BANGUMI_SCRIPT_NAME = "girigirilove Glass"
+const BANGUMI_SCRIPT_NAME = "girigirilove Glass C"
 const BANGUMI_AUTH_KEY = "bangumi.auth"
 const BANGUMI_CLIENT_ID_KEY = "bangumi.clientId"
 const BANGUMI_CLIENT_SECRET_KEY = "bangumi.clientSecret"
@@ -139,7 +139,7 @@ export const bangumiClient = {
     const auth = readAuth()
     const isExpired = Boolean(auth?.expiresAt && auth.expiresAt <= Date.now())
     return {
-      isAuthenticated: Boolean(auth?.accessToken) && (!isExpired || Boolean(auth?.refreshToken)),
+      isAuthenticated: (Boolean(auth?.accessToken) && (!isExpired || Boolean(auth?.refreshToken))) || Boolean(auth?.refreshToken),
       hasRefreshToken: Boolean(auth?.refreshToken),
       expiresAt: auth?.expiresAt || 0,
     }
@@ -653,7 +653,10 @@ function readAuth(): BangumiOAuthAuth | null {
   if (!raw) return null
   try {
     const value = JSON.parse(raw) as Partial<BangumiOAuthAuth>
-    return typeof value.accessToken === "string" ? { accessToken: value.accessToken, refreshToken: typeof value.refreshToken === "string" ? value.refreshToken : "", expiresAt: typeof value.expiresAt === "number" ? value.expiresAt : 0 } : null
+    const accessToken = typeof value.accessToken === "string" ? value.accessToken.trim() : ""
+    const refreshToken = typeof value.refreshToken === "string" ? value.refreshToken.trim() : ""
+    if (!accessToken && !refreshToken) return null
+    return { accessToken, refreshToken, expiresAt: typeof value.expiresAt === "number" ? value.expiresAt : 0 }
   } catch {
     return null
   }
@@ -678,33 +681,41 @@ function normalizeOAuthInput(input: Record<string, any> | string | null | undefi
   }))
 }
 
-function normalizeAuth(input: any): BangumiOAuthAuth | null {
-  if (!input || typeof input !== "object" || typeof input.access_token !== "string") return null
-  return { accessToken: input.access_token, refreshToken: typeof input.refresh_token === "string" ? input.refresh_token : "", expiresAt: Date.now() + (typeof input.expires_in === "number" ? input.expires_in * 1000 : 0) }
+function normalizeAuth(input: any, fallbackRefreshToken = ""): BangumiOAuthAuth | null {
+  if (!input || typeof input !== "object" || typeof input.access_token !== "string" || !input.access_token.trim()) return null
+  const expiresIn = typeof input.expires_in === "number" && Number.isFinite(input.expires_in) ? input.expires_in : 0
+  return {
+    accessToken: input.access_token.trim(),
+    refreshToken: typeof input.refresh_token === "string" && input.refresh_token.trim() ? input.refresh_token.trim() : fallbackRefreshToken,
+    expiresAt: expiresIn > 0 ? Date.now() + expiresIn * 1000 : 0,
+  }
 }
 
 async function ensureAuth(): Promise<BangumiOAuthAuth | null> {
   const auth = readAuth()
-  if (!auth || !auth.accessToken) return null
+  if (!auth) return null
+  if (!auth.accessToken) {
+    if (!auth.refreshToken) return null
+    return refreshAuth(auth.refreshToken)
+  }
   if (!auth.expiresAt || auth.expiresAt > Date.now() + AUTH_REFRESH_SKEW_MS) return auth
   if (!auth.refreshToken) {
     Storage.remove(BANGUMI_AUTH_KEY)
     return null
   }
   const refreshed = await refreshAuth(auth.refreshToken)
-  if (!refreshed) {
-    Storage.remove(BANGUMI_AUTH_KEY)
-    return null
-  }
+  if (!refreshed) return null
   return refreshed
 }
 
 async function refreshAuth(refreshToken: string): Promise<BangumiOAuthAuth | null> {
+  const preservedRefreshToken = refreshToken.trim()
+  if (!preservedRefreshToken) return null
   const config = bangumiClient.getOAuthConfig()
   if (!config.clientId || !config.clientSecret) return null
-  const response = await fetch(`https://${config.authDomain}/oauth/access_token`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ grant_type: "refresh_token", client_id: config.clientId, client_secret: config.clientSecret, refresh_token: refreshToken, redirect_uri: config.callbackURL }) })
+  const response = await fetch(`https://${config.authDomain}/oauth/access_token`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ grant_type: "refresh_token", client_id: config.clientId, client_secret: config.clientSecret, refresh_token: preservedRefreshToken, redirect_uri: config.callbackURL }) })
   if (!response.ok) return null
-  const auth = normalizeAuth(await response.json())
+  const auth = normalizeAuth(await response.json(), preservedRefreshToken)
   if (auth) Storage.set(BANGUMI_AUTH_KEY, JSON.stringify(auth))
   return auth
 }

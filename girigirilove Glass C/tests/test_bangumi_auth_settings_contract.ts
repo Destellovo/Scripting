@@ -11,7 +11,7 @@ async function main() {
   const bangumiSource = await FileManager.readAsString(`${projectDirectory}/class/bangumi.ts`)
 
   requireMatch(settingSource, /BangumiOAuthView/, "设置页缺少独立 Bangumi OAuth 授权页面入口")
-  requireMatch(bangumiSource, /BANGUMI_SCRIPT_NAME = "girigirilove Glass"/, "Bangumi OAuth 未使用当前脚本名称")
+  requireMatch(bangumiSource, /BANGUMI_SCRIPT_NAME = "girigirilove Glass C"/, "Bangumi OAuth 未使用当前脚本名称")
   requireMatch(settingSource + bangumiSource, /buildOAuthURLForCredentials/, "授权链接未支持输入后实时生成")
   requireMatch(settingSource, /<NavigationLink[^>]*destination=\{<BangumiOAuthView \/>\}/, "设置页未通过原有导航栈打开授权页")
   requireMatch(settingSource, /glassListRowStyleProps/, "设置入口未使用原有完整 Glass 行表面")
@@ -52,6 +52,9 @@ async function main() {
   requireMatch(oauthPageSource, /bangumiClient\.saveOAuthClientConfig\(/, "授权页未保存 OAuth 应用配置")
   requireMatch(oauthPageSource, /bangumiClient\.clearOAuthAuth\(\)/, "授权页缺少清除 OAuth 会话动作")
   requireMatch(bangumiSource, /Script\.createRunSingleURLScheme\(BANGUMI_SCRIPT_NAME, \{ oauth_callback: "1" \}\)/, "Bangumi OAuth 缺少当前脚本回调地址")
+  requireMatch(bangumiSource, /function normalizeAuth\(input: any, fallbackRefreshToken = ""\)/, "刷新响应缺少旧 refresh token 保留机制")
+  requireMatch(bangumiSource, /normalizeAuth\(await response\.json\(\), preservedRefreshToken\)/, "刷新 token 时未保留服务端省略的 refresh token")
+  requireMatch(bangumiSource, /if \(!auth\.accessToken\) \{[\s\S]*return refreshAuth\(auth\.refreshToken\)/, "仅有 refresh token 时未主动恢复会话")
   requireMatch(bangumiSource, /grant_type: "authorization_code"/, "Bangumi OAuth 缺少授权码兑换")
   requireMatch(bangumiSource, /grant_type: "refresh_token"/, "Bangumi OAuth 缺少自动续期")
   requireMatch(bangumiSource, /Storage\.set\(BANGUMI_AUTH_KEY, JSON\.stringify\(auth\)\)/, "Bangumi OAuth 会话未持久化")
