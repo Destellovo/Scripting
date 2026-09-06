@@ -23,7 +23,11 @@ class MusicFileManager {
     if (!musicId || musicId.includes("/") || musicId.includes("..")) {
       throw new Error("Invalid music ID")
     }
-    const destinationPath = this.getAudioPath(musicId, format)
+    const normalizedFormat = format.trim().toLowerCase().replace(/^\./, "")
+    if (!/^[a-z0-9]{1,5}$/.test(normalizedFormat)) {
+      throw new Error("Invalid audio format")
+    }
+    const destinationPath = this.getAudioPath(musicId, normalizedFormat)
     await FileManager.copyFile(sourcePath, destinationPath)
     return destinationPath
   }

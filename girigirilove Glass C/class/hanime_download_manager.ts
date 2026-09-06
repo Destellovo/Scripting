@@ -257,8 +257,8 @@ class HanimeDownloadManager {
     }
   }
 
-  private async downloadDirect(videoCode: string, source: HanimeVideoSource, context: DownloadContext): Promise<DownloadResult> {
-    const filePath = this.getDirectFilePath(videoCode, source)
+  private async downloadDirect(downloadKey: string, source: HanimeVideoSource, context: DownloadContext): Promise<DownloadResult> {
+    const filePath = this.getDirectFilePath(downloadKey, source)
     const tempPath = `${filePath}.tmp`
     if (await FileManager.exists(tempPath)) await FileManager.remove(tempPath)
     const response = await fetch(source.url, { headers: downloadHeaders("video/*,*/*;q=0.8"), signal: context.signal })

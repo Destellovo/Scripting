@@ -11,7 +11,12 @@ export const GIRIGIRI_GLASS_C_STORAGE_LOCATION_KEY = "girigirilove_glass_c_stora
 
 class Setting {
   private readonly LOCATION_KEY = GIRIGIRI_GLASS_C_STORAGE_LOCATION_KEY
-  location: StorageLocation = (Storage.get(this.LOCATION_KEY) as StorageLocation) || "appGroup"
+  location: StorageLocation = this.readLocation()
+
+  private readLocation(): StorageLocation {
+    const value = Storage.get(this.LOCATION_KEY)
+    return value === "iCloud" ? "iCloud" : "appGroup"
+  }
 
   getBasePath(): string {
     return this.location === "iCloud"
@@ -22,12 +27,18 @@ class Setting {
   async setLocation(newLocation: StorageLocation): Promise<void> {
     if (this.location === newLocation) return
 
+    const previousLocation = this.location
     const oldPath = this.getBasePath()
     this.location = newLocation
     const newPath = this.getBasePath()
 
-    await this.migrateFiles(oldPath, newPath)
-    Storage.set(this.LOCATION_KEY, newLocation)
+    try {
+      await this.migrateFiles(oldPath, newPath)
+      Storage.set(this.LOCATION_KEY, newLocation)
+    } catch (error) {
+      this.location = previousLocation
+      throw error
+    }
   }
 
   private async migrateFiles(oldPath: string, newPath: string): Promise<void> {

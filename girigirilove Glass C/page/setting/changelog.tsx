@@ -28,6 +28,34 @@ type ChangelogRelease = {
 
 export const CHANGELOG_RELEASES: ReadonlyArray<ChangelogRelease> = [
   {
+    version: "5.1.3",
+    date: "2026年9月6日",
+    headline: "授权、数据一致性与容错修复",
+    summary: "修复 Bangumi OAuth 回调与续期问题，并增强音乐库、播放列表、存储迁移和数据库清理的可靠性。",
+    items: [
+      {
+        icon: "person.badge.key.fill",
+        title: "修复 Bangumi OAuth 授权",
+        detail: "回调脚本名称现与 GiriGiri Glass C 完全一致；支持仅凭刷新令牌恢复会话，并在刷新响应省略新令牌时保留原刷新令牌。",
+      },
+      {
+        icon: "music.note.list",
+        title: "保护音乐库与播放列表数据",
+        detail: "更新音乐资料不再清空收藏和播放次数；删除歌曲或重复移除时会准确重算播放列表数量。",
+      },
+      {
+        icon: "externaldrive.badge.checkmark",
+        title: "增强数据库与存储容错",
+        detail: "启用 Hanime 数据库外键，兼容清理历史孤儿记录，并在存储迁移失败时恢复原位置状态。",
+      },
+      {
+        icon: "arrow.triangle.2.circlepath",
+        title: "完善数据解析和自动更新",
+        detail: "兼容 Bangumi 数字字符串并扩大收藏分页范围；自动更新切换到包含本次修复的发行包。",
+      },
+    ],
+  },
+  {
     version: "5.1.1",
     date: "2026年8月6日",
     headline: "搜索结果导航体验优化",

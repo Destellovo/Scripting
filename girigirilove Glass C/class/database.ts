@@ -165,8 +165,19 @@ class Database {
   async addMusic(music: Omit<Music, "play_count" | "is_favorite">): Promise<void> {
       if (!this.db) throw new Error("Database not initialized")
       await this.db.execute(
-        `INSERT OR REPLACE INTO music (id, title, artist, album, duration, cover_url, audio_url, is_downloaded, file_size, added_at, last_played_at, play_count, is_favorite)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)`,
+        `INSERT INTO music (id, title, artist, album, duration, cover_url, audio_url, is_downloaded, file_size, added_at, last_played_at, play_count, is_favorite)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+         ON CONFLICT(id) DO UPDATE SET
+           title = excluded.title,
+           artist = excluded.artist,
+           album = excluded.album,
+           duration = excluded.duration,
+           cover_url = excluded.cover_url,
+           audio_url = excluded.audio_url,
+           is_downloaded = excluded.is_downloaded,
+           file_size = excluded.file_size,
+           added_at = excluded.added_at,
+           last_played_at = COALESCE(excluded.last_played_at, music.last_played_at)`,
         [music.id, music.title, music.artist, music.album, music.duration, music.cover_url ?? null, music.audio_url ?? null, music.is_downloaded ? 1 : 0, music.file_size ?? null, music.added_at, music.last_played_at ?? null]
       )
     }
@@ -226,27 +237,23 @@ class Database {
     async getMusicByAlbum(): Promise<{ album: string, artist: string, count: number, musics: Music[] }[]> {
           if (!this.db) throw new Error("Database not initialized")
           const allMusic = await this.db.fetchAll<any>("SELECT * FROM music ORDER BY album, artist, added_at DESC")
-          const grouped = new Map<string, Music[]>()
+          const grouped = new Map<string, { album: string; artist: string; musics: Music[] }>()
           
           for (const row of allMusic) {
             const music = this.rowToMusic(row)
-            const key = `${music.album}|${music.artist}`
-            if (!grouped.has(key)) {
-              grouped.set(key, [])
-            }
-            grouped.get(key)!.push(music)
+            const key = JSON.stringify([music.album, music.artist])
+            const group = grouped.get(key)
+            if (group) group.musics.push(music)
+            else grouped.set(key, { album: music.album, artist: music.artist, musics: [music] })
           }
           
-          return Array.from(grouped.entries())
-            .map(([key, musics]) => {
-              const [album, artist] = key.split('|')
-              return {
-                album,
-                artist,
-                count: musics.length,
-                musics
-              }
-            })
+          return Array.from(grouped.values())
+            .map(({ album, artist, musics }) => ({
+              album,
+              artist,
+              count: musics.length,
+              musics
+            }))
             .sort((a, b) => b.count - a.count)
         }
 
@@ -284,9 +291,20 @@ class Database {
           await fileManager.deleteAudio(id)
           await fileManager.deleteCover(id)
         }
-        
-        await this.db.execute("DELETE FROM music WHERE id = ?", [id])
+
+        const playlistRows = await this.db.fetchAll<any>(
+          "SELECT DISTINCT playlist_id FROM playlist_music WHERE music_id = ?",
+          [id]
+        )
         await this.db.execute("DELETE FROM playlist_music WHERE music_id = ?", [id])
+        await this.db.execute("DELETE FROM music WHERE id = ?", [id])
+        const now = Date.now()
+        for (const row of playlistRows) {
+          await this.db.execute(
+            "UPDATE playlist SET music_count = (SELECT COUNT(*) FROM playlist_music WHERE playlist_id = ?), updated_at = ? WHERE id = ?",
+            [row.playlist_id, now, row.playlist_id]
+          )
+        }
       }
 
   // Playlist CRUD
@@ -338,13 +356,18 @@ class Database {
 
   async removeMusicFromPlaylist(playlistId: string, musicId: string): Promise<void> {
     if (!this.db) throw new Error("Database not initialized")
+    const existing = await this.db.fetchAll<any>(
+      "SELECT 1 FROM playlist_music WHERE playlist_id = ? AND music_id = ?",
+      [playlistId, musicId]
+    )
+    if (existing.length === 0) return
     await this.db.execute(
       "DELETE FROM playlist_music WHERE playlist_id = ? AND music_id = ?",
       [playlistId, musicId]
     )
     await this.db.execute(
-      "UPDATE playlist SET music_count = music_count - 1, updated_at = ? WHERE id = ?",
-      [Date.now(), playlistId]
+      "UPDATE playlist SET music_count = (SELECT COUNT(*) FROM playlist_music WHERE playlist_id = ?), updated_at = ? WHERE id = ?",
+      [playlistId, Date.now(), playlistId]
     )
   }
 

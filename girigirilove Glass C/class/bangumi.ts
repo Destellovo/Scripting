@@ -299,8 +299,10 @@ export const bangumiClient = {
 
   async getProgressCollections(type?: number): Promise<BangumiProgressItem[]> {
     const pageSize = 50
+    const maxPages = 200
     const result: BangumiProgressItem[] = []
-    for (let offset = 0; offset < 500; offset += pageSize) {
+    for (let page = 0; page < maxPages; page += 1) {
+      const offset = page * pageSize
       const query = new URLSearchParams({ since: "0", limit: `${pageSize}`, offset: `${offset}` })
       if (type) query.set("type", `${type}`)
       const payload = await requestJson(`${BANGUMI_PRIVATE_API}/p1/collections/subjects?${query.toString()}`)
@@ -638,7 +640,12 @@ function stringValue(value: unknown): string {
 }
 
 function numberValue(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return 0
 }
 
 type BangumiOAuthAuth = { accessToken: string; refreshToken: string; expiresAt: number }

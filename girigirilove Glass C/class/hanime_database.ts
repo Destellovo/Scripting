@@ -55,6 +55,7 @@ class HanimeDatabase {
   async init(): Promise<void> {
     await FileManager.createDirectory(setting.getBasePath(), true)
     this.db = SQLite.open(Path.join(setting.getBasePath(), "hanime.db"))
+    await this.db.execute("PRAGMA foreign_keys = ON")
     await this.createTables()
   }
 
@@ -242,6 +243,9 @@ class HanimeDatabase {
 
   async deleteVideo(videoCode: string): Promise<void> {
     await this.ensureReady()
+    // 显式清理子表，兼容历史数据库曾在未启用 foreign_keys 时产生的数据。
+    await this.db!.execute("DELETE FROM hanime_episode_history WHERE video_code = ?", [videoCode])
+    await this.db!.execute("DELETE FROM hanime_download WHERE video_code = ?", [videoCode])
     await this.db!.execute("DELETE FROM hanime_video WHERE video_code = ?", [videoCode])
   }
 
