@@ -13,7 +13,7 @@ import {
   useState,
 } from "scripting"
 import { bangumiClient } from "../../class/bangumi"
-import { glassEffectFor, GlassListRow, GlassSurface, PageBackground, ShelfHeader } from "../../design-glass"
+import { GlassListRow, GlassSurface, PageBackground, ShelfHeader } from "../../design-glass"
 const ICON_COLUMN_WIDTH = 32
 const ICON_HEIGHT = 28
 const ICON_FONT = 22
@@ -223,7 +223,7 @@ function OAuthStatusRow(props: { title: string; value: string; icon: string }) {
 
 function ConfigActionRow(props: { title: string; icon: string; action: () => void | Promise<void>; destructive?: boolean }) {
   return (
-    <Button action={props.action} buttonStyle="plain" frame={{ maxWidth: "infinity", minHeight: 48 }} glassEffect={glassEffectFor(props.destructive ? "navigation" : "content", { type: "rect", cornerRadius: 16, style: "continuous" }, true)} glassEffectTransition="materialize" accessibilityLabel={props.title}>
+    <Button action={() => { void props.action() }} buttonStyle="plain" frame={{ maxWidth: "infinity", minHeight: 48 }} contentShape={{ type: "rect", cornerRadius: 16, style: "continuous" }} accessibilityLabel={props.title}>
       <HStack alignment="center" spacing={12} padding={{ horizontal: 16, vertical: 11 }} frame={{ maxWidth: "infinity", minHeight: 48, alignment: "leading" }}>
         <Image systemName={props.icon} font={ICON_FONT} foregroundStyle="secondaryLabel" frame={{ width: ICON_COLUMN_WIDTH, height: ICON_HEIGHT, alignment: "center" }} />
         <Text font="body" foregroundStyle={props.destructive ? "systemPink" : "label"}>{props.title}</Text>
@@ -234,7 +234,7 @@ function ConfigActionRow(props: { title: string; icon: string; action: () => voi
 
 function OAuthButton(props: { title: string; icon: string; action: () => void; disabled?: boolean; elevated?: boolean }) {
   return (
-    <Button action={props.action} disabled={props.disabled} buttonStyle="plain" frame={{ maxWidth: "infinity", minHeight: 44 }} glassEffect={glassEffectFor(props.elevated ? "elevated" : "navigation", "capsule", true)} glassEffectTransition="materialize" accessibilityLabel={props.title}>
+    <Button action={props.action} disabled={props.disabled} buttonStyle="plain" frame={{ maxWidth: "infinity", minHeight: 44 }} contentShape="capsule" accessibilityLabel={props.title}>
       <HStack spacing={7} padding={{ horizontal: 12, vertical: 9 }} frame={{ maxWidth: "infinity", minHeight: 44, alignment: "center" }}>
         <Image systemName={props.icon} font={ICON_FONT} foregroundStyle="secondaryLabel" frame={{ width: ICON_COLUMN_WIDTH, height: ICON_HEIGHT, alignment: "center" }} />
         <Text font="subheadline" fontWeight="semibold">{props.title}</Text>

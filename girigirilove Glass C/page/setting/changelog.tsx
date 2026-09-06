@@ -28,6 +28,29 @@ type ChangelogRelease = {
 
 export const CHANGELOG_RELEASES: ReadonlyArray<ChangelogRelease> = [
   {
+    version: "5.1.6",
+    date: "2026年9月6日",
+    headline: "恢复退出按钮与 Bangumi 配置交互",
+    summary: "修正上一版导航栏承载和 Glass 手势调整造成的交互回归。",
+    items: [
+      {
+        icon: "xmark.circle.fill",
+        title: "恢复关闭与最小化按钮",
+        detail: "重新使用外层 NavigationStack 承载全局工具栏，同时继续关闭标签栏滚动收起手势。",
+      },
+      {
+        icon: "key.fill",
+        title: "修复 Bangumi 配置按钮",
+        detail: "配置、复制回调地址、打开 Safari 和清除会话按钮改由原生 Button 独占命中，不再叠加交互式 Glass 手势。",
+      },
+      {
+        icon: "rectangle.and.hand.point.up.left",
+        title: "恢复整行导航交互",
+        detail: "撤销会破坏 NavigationLink 与 Menu 行为的共享 buttonStyle 覆盖，并恢复原版 Glass 交互。",
+      },
+    ],
+  },
+  {
     version: "5.1.5",
     date: "2026年9月6日",
     headline: "修复脚本下载与自动更新连接",
