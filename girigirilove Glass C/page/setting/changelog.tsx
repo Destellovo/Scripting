@@ -28,6 +28,19 @@ type ChangelogRelease = {
 
 export const CHANGELOG_RELEASES: ReadonlyArray<ChangelogRelease> = [
   {
+    version: "5.1.5",
+    date: "2026年9月6日",
+    headline: "修复脚本下载与自动更新连接",
+    summary: "将发行包下载和自动更新切换到 jsDelivr，避免部分网络无法访问 raw.githubusercontent.com。",
+    items: [
+      {
+        icon: "icloud.and.arrow.down.fill",
+        title: "更换可靠下载地址",
+        detail: "自动更新现使用 jsDelivr GitHub 镜像，发行包内容保持一致。",
+      },
+    ],
+  },
+  {
     version: "5.1.4",
     date: "2026年9月6日",
     headline: "修复按钮首次点击不响应",

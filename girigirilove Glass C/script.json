@@ -23,7 +23,7 @@
   },
   "description" : "GiriGiri 动漫浏览器：支持分类搜索、双来源新番时间表、系统播放、逐集离线、收藏、历史与续播，并提供 Bangumi OAuth、完整条目资料、系统翻译和进度同步。",
   "remoteResource" : {
-    "url" : "https:\/\/raw.githubusercontent.com\/Destellovo\/Scripting\/main\/girigirilove%20Glass%20C.scripting",
+    "url" : "https:\/\/cdn.jsdelivr.net\/gh\/Destellovo\/Scripting@main\/girigirilove%20Glass%20C.scripting",
     "autoUpdateInterval" : 600
   },
   "localizedNames" : {
@@ -44,5 +44,5 @@
   "contributors" : [
 
   ],
-  "version" : "5.1.4"
+  "version" : "5.1.5"
 }
