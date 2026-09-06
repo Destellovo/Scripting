@@ -1,0 +1,45 @@
+{
+  "runInApp" : false,
+  "name" : "girigirilove Glass C",
+  "color" : "rgba(0, 0, 0, 1.00)",
+  "intentInputTypes" : [
+
+  ],
+  "localizedDescriptions" : {
+    "pt" : "",
+    "de" : "",
+    "es" : "",
+    "it" : "",
+    "ja" : "",
+    "fr" : "",
+    "ru" : "",
+    "zh" : "GiriGiri 动漫浏览器：支持分类搜索、双来源新番时间表、系统播放、逐集离线、收藏、历史与续播，并提供 Bangumi OAuth、完整条目资料、系统翻译和进度同步。",
+    "en" : "GiriGiri anime browser with category search, GiriGiri and Bangumi schedules, system playback, per-episode offline saving, favorites, history and resume, plus Bangumi OAuth, full subject details, system translation and progress sync."
+  },
+  "author" : {
+    "name" : "瀬戸 明日葉",
+    "email" : null,
+    "homepage" : "https:\/\/github.com\/OkadaMei\/Scripting"
+  },
+  "description" : "GiriGiri 动漫浏览器：支持分类搜索、双来源新番时间表、系统播放、逐集离线、收藏、历史与续播，并提供 Bangumi OAuth、完整条目资料、系统翻译和进度同步。",
+  "remoteResource" : null,
+  "localizedNames" : {
+    "ru" : "",
+    "zh" : "GiriGiri Glass",
+    "fr" : "",
+    "ja" : "",
+    "en" : "GiriGiri Glass",
+    "de" : "",
+    "it" : "",
+    "es" : "",
+    "pt" : ""
+  },
+  "icon" : "tv",
+  "permissions" : null,
+  "iconImage" : "",
+  "entry" : "index.tsx",
+  "contributors" : [
+
+  ],
+  "version" : "5.1.1"
+}
